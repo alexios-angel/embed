@@ -2,7 +2,7 @@
 #include <stddef.h>
 #include <string.h>
 
-int main () {
+int main (int, char*[]) {
 	const char str_data[] = {
 #embed <media/art.txt> suffix(,)
 		0

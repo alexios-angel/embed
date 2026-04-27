@@ -1,7 +1,7 @@
 #ifndef PHD_EMBED_EXAMPLE_SHADER_HPP
 #define PHD_EMBED_EXAMPLE_SHADER_HPP
 
-#include <phd/embed/embed.hpp>
+#include <phd/embed.hpp>
 #include <span>
 #include <array>
 #include <iterator>

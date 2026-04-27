@@ -12,12 +12,12 @@
 			"description": "Configure the whole embed repository",
 			"hidden": false,
 			"generator": "Ninja Multi-Config",
-			"installDir": "${sourceParentDir}/.cmake/$env{USER}/install",
-			"binaryDir": "${sourceParentDir}/.cmake/$env{USER}/build",
+			"installDir": "${sourceDir}/.cmake/$env{USER}/install",
+			"binaryDir": "${sourceDir}/.cmake/$env{USER}/build",
 			"cacheVariables": {
 				"PHD_EMBED_EXAMPLES": true,
 				"PHD_EMBED_TESTS": true,
-				"CMAKE_INSTALL_PREFIX": "${sourceParentDir}/.cmake/$env{USER}/install"
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/.cmake/$env{USER}/install"
 			}
 		},
 		{
@@ -47,49 +47,72 @@
 	],
 	"buildPresets": [
 		{
-			"name": "embed",
+			"name": "embed-gcc",
 			"description": "build the embed library and related tests for gcc",
-			"displayName": "embed",
-			"configurePreset": "embed",
+			"displayName": "embed (GCC)",
+			"configurePreset": "embed-gcc",
 			"configuration": "Debug"
 		},
 		{
-			"name": "embed",
-			"description": "install the embed library",
-			"displayName": "embed (install)",
-			"configurePreset": "embed-windows",
-			"configuration": "Debug",
-			"targets": [
-				"install-embed"
-			]
+			"name": "embed-clang",
+			"description": "build the embed library and related tests for clang",
+			"displayName": "embed (Clang)",
+			"configurePreset": "embed-clang",
+			"configuration": "Debug"
 		}
 	],
 	"testPresets": [
 		{
-			"name": "embed",
+			"name": "embed-gcc",
 			"description": "debug tests for phd::embed",
-			"displayName": "embed",
-			"configurePreset": "embed",
+			"displayName": "embed (GCC)",
+			"configurePreset": "embed-gcc",
+			"configuration": "Debug"
+		},
+		{
+			"name": "embed-clang",
+			"description": "debug tests for phd::embed",
+			"displayName": "embed (Clang)",
+			"configurePreset": "embed-clang",
 			"configuration": "Debug"
 		}
 	],
 	"workflowPresets": [
 		{
-			"name": "embed",
+			"name": "embed-gcc",
 			"description": "Typical embed workflow",
-			"displayName": "embed",
+			"displayName": "embed (GCC)",
 			"steps": [
 				{
 					"type": "configure",
-					"name": "embed"
+					"name": "embed-gcc"
 				},
 				{
 					"type": "build",
-					"name": "embed"
+					"name": "embed-gcc"
 				},
 				{
 					"type": "test",
-					"name": "embed"
+					"name": "embed-gcc"
+				}
+			]
+		},
+		{
+			"name": "embed-clang",
+			"description": "Typical embed workflow",
+			"displayName": "embed (Clang)",
+			"steps": [
+				{
+					"type": "configure",
+					"name": "embed-clang"
+				},
+				{
+					"type": "build",
+					"name": "embed-clang"
+				},
+				{
+					"type": "test",
+					"name": "embed-clang"
 				}
 			]
 		}

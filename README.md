@@ -70,7 +70,7 @@ Foo
 #include <stdint.h>
 #include <stdio.h>
 
-int main () {
+int main (int, char*[]) {
 	const unsigned char str_data[] = {
 #embed "art.txt" suffix(,)
 		0
@@ -94,7 +94,7 @@ int main () {
 
 #define ARRAY_SIZE(x) (sizeof(arr_val) / sizeof(arr_val[0]))
 
-int main () {
+int main (int, char*[]) {
 	const unsigned char data[] = {
 #embed "art.txt"
 	};
@@ -119,7 +119,7 @@ int main () {
 
 #define ARRAY_SIZE(x) (sizeof(arr_val) / sizeof(arr_val[0]))
 
-int main () {
+int main (int, char*[]) {
 	const unsigned char data[] = {
 #embed "/dev/urandom" limit(4)
 	};

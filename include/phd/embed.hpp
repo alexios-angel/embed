@@ -44,7 +44,7 @@
 #endif // __has_builtin test
 #endif // undefined PHD_EMBED_HAS_BUILTIN_STD_EMBED
 
-#if (defined(__cpp_lib_embed) && (__cpp_lib_embed > 202300L)) && PHD_EMBED_HAS_INCLUDE(<embed>)
+#if (defined(__cpp_lib_embed) && (__cpp_lib_embed >= 202606L)) && PHD_EMBED_HAS_INCLUDE(<embed>)
 
 #include <embed>
 
@@ -80,35 +80,38 @@ namespace phd { inline namespace v0 {
 namespace phd {
 
 	namespace __detail {
+		inline constexpr const unsigned int __local_lookup = 0b101u;
+
 		enum __builtin_result {
-			__file_not_found = 0,
-			__file_found = 1,
+			__file_not_found           = 0,
+			__file_found               = 1,
 			__file_found_but_no_depend = 2,
-			__file_found_and_empty = 3
+			__file_found_and_empty     = 3
 		};
 
 		template <typename _Ty, ::std::size_t _Extent, typename _StrView>
-		inline consteval ::std::span<const _Ty, _Extent> __embed(const _StrView& __resource_name,
-		     ::std::size_t __offset, const ::std::optional<::std::size_t>& __limit) noexcept {
-			static_assert(
-			     (::std::is_integral_v<_Ty> || ::std::is_enum_v<_Ty>) && alignof(_Ty) == 1 && sizeof(_Ty) == 1,
-			     "Type must have sizeof(T) == 1, alignof(T) == 1, and it must be an integral or "
-			     "enumeration type");
-			int __status       = -1;
+		inline consteval ::std::span<const _Ty, _Extent>
+		__embed(const _StrView& __resource_name, ::std::size_t __offset,
+		        const ::std::optional<::std::size_t>& __limit) noexcept {
+			static_assert((::std::is_integral_v<_Ty> || ::std::is_enum_v<_Ty>) && alignof(_Ty) == 1
+			                   && sizeof(_Ty) == 1,
+			              "Type must have sizeof(T) == 1, alignof(T) == 1, and it must be an integral or "
+			              "enumeration type");
+			int __status     = -1;
 			const _Ty* __res = nullptr;
 			size_t __res_len = 0;
 			if constexpr (_Extent != ::std::dynamic_extent) {
-				__res = __builtin_std_embed(
-				     __status, __res_len, __res, __resource_name.size(), __resource_name.data(), __offset, _Extent);
+				__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
+				                            __resource_name.data(), __offset, _Extent);
 			}
 			else {
 				if (__limit) {
-					__res = __builtin_std_embed(__status, __res_len, __res, __resource_name.size(),
-					     __resource_name.data(), __offset, *__limit);
+					__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
+					                            __resource_name.data(), __offset, *__limit);
 				}
 				else {
-					__res = __builtin_std_embed(
-					     __status, __res_len, __res, __resource_name.size(), __resource_name.data(), __offset);
+					__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
+					                            __resource_name.data(), __offset);
 				}
 			}
 			if (__status == __file_not_found) {
@@ -136,43 +139,43 @@ namespace phd {
 
 	template <typename _Ty = std::byte>
 	inline constexpr ::std::span<const _Ty> embed(::std::string_view __resource_name, ::std::size_t __offset = 0,
-	     ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
 	template <typename _Ty = std::byte>
 	inline consteval ::std::span<const _Ty> embed(::std::wstring_view __resource_name, ::std::size_t __offset = 0,
-	     ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
 #ifdef __cpp_char8_t
 
 	template <typename _Ty = ::std::byte>
-	inline consteval ::std::span<const _Ty> embed(::std::u8string_view __resource_name,
-	     ::std::size_t __offset = 0, ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	inline consteval ::std::span<const _Ty> embed(::std::u8string_view __resource_name, ::std::size_t __offset = 0,
+	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
 #endif // char8_t shenanigans
 
-	template <typename _Ty, ::std::size_t _Extent>
-	inline constexpr ::std::span<const _Ty, _Extent> embed(
-	     ::std::string_view __resource_name, ::std::size_t __offset = 0) noexcept {
+	template <::std::size_t _Extent, typename _Ty = ::std::byte>
+	inline constexpr ::std::span<const _Ty, _Extent> embed(::std::string_view __resource_name,
+	                                                       ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 
-	template <typename _Ty, ::std::size_t _Extent>
-	inline consteval ::std::span<const _Ty, _Extent> embed(
-	     ::std::wstring_view __resource_name, ::std::size_t __offset = 0) noexcept {
+	template <::std::size_t _Extent, typename _Ty = ::std::byte>
+	inline consteval ::std::span<const _Ty, _Extent> embed(::std::wstring_view __resource_name,
+	                                                       ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 
 #ifdef __cpp_char8_t
 
-	template <typename _Ty, ::std::size_t _Extent>
-	inline consteval ::std::span<const _Ty, _Extent> embed(
-	     ::std::u8string_view __resource_name, ::std::size_t __offset = 0) noexcept {
+	template <::std::size_t _Extent, typename _Ty = ::std::byte>
+	inline consteval ::std::span<const _Ty, _Extent> embed(::std::u8string_view __resource_name,
+	                                                       ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 

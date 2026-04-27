@@ -3,7 +3,7 @@
 #include <array>
 #include <cstddef>
 
-#depend "zres/*"
+#depend "resources/**"
 
 using big_buffer = std::array<char, 4096>;
 using filename_buffer = std::array<char, 256>;
@@ -17,7 +17,7 @@ consteval std::string_view stem_root (std::string_view file) noexcept {
 }
 
 consteval void recursive_parse (std::string_view file, big_buffer& buf, std::size_t& buf_i, int depth) {
-	auto data = std::embed<char>(file);
+	auto data = phd::embed<char>(file);
 	for (std::size_t i = 0; i < data.size(); ++i) {
 		const char& c = data[i];
 		switch (c) {
@@ -116,12 +116,12 @@ consteval auto comptime_make_array (const auto& S) {
 	return r;
 }
 
-int main() {
-	constexpr auto original_file_span = std::embed<char>("zres/main.lua");
+int main(int, char*[]) {
+	constexpr auto original_file_span = phd::embed<char>("resources/main.lua");
 	constexpr auto original_file = comptime_make_array<original_file_span.size(), true>(original_file_span);
-	constexpr big_buffer glob = recursive_parse("zres/main.lua");
+	constexpr big_buffer glob = recursive_parse("resources/main.lua");
 
-	std::printf("original file (\"%s\"):\n\n%s", "zres/main.lua", original_file.data());
+	std::printf("original file (\"%s\"):\n\n%s", "resources/main.lua", original_file.data());
 	std::printf("\n\n=================================================================================\n");
 	std::printf("`consteval recursive_parse` result:\n\n%s", glob.data());
 

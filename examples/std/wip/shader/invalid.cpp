@@ -12,7 +12,7 @@
 
 #include <iostream>
 
-int main() {
+int main(int, char*[]) {
   static constexpr std::string_view px_shader_main_file = "assets/shaders/invalid.pxglsl";
   static constexpr std::span<const char> px_shader_main =
       phd::embed<char>(px_shader_main_file);

@@ -1,6 +1,6 @@
 #include <string.h>
 
-int main () {
+int main (int, char*[]) {
 	const char str_data[] = {
 #embed "a.txt" suffix(,)
 		0

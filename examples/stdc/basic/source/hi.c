@@ -1,6 +1,6 @@
 // hi :D
 
-int main () {
+int main (int, char*[]) {
 	const unsigned char data[] = {
 #embed __FILE__
 	};

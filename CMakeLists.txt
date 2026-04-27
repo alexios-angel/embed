@@ -13,7 +13,7 @@
 #
 # ============================================================================
 
-cmake_minimum_required(VERSION 3.13.0)
+cmake_minimum_required(VERSION 3.25.0)
 
 # # Project declaration
 # informs about the project, gives a description, version and MOST IMPORTANTLY
@@ -25,14 +25,6 @@ project(phd.embed VERSION 1.0.0 DESCRIPTION "A spicy library on top of compiler 
 # our from the standard cmake libraries
 # Add home-rolled modules path to front of module path list
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" "${CMAKE_MODULE_PATH}")
-
-# # # Top-Level Directories
-# Check if this is the top-level project or not
-if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    set(PHD_EMBED_IS_TOP_LEVEL_PROJECT true)
-else()
-    set(PHD_EMBED_IS_TOP_LEVEL_PROJECT false)
-endif()
 
 # # Include standard modules
 include(CMakeDependentOption)
@@ -61,13 +53,13 @@ target_include_directories(phd.embed INTERFACE
 target_sources(phd.embed INTERFACE ${phd.embed.sources})
 
 # # Benchmarks, Tests, Examples
-function(target_common_options target)
+function(target_common_options target style)
 	target_compile_options(${target}
 		PRIVATE
-		-std=c2x
 		-Wall
 		-Wpedantic
-		"--embed-dir=${CMAKE_CURRENT_SOURCE_DIR}/assets"
+		"--embed-dir=${CMAKE_SOURCE_DIR}/examples/assets"
+		"--embed-dir=${CMAKE_SOURCE_DIR}"
 	)
 	target_compile_definitions(${target}
 		PRIVATE
@@ -78,6 +70,28 @@ function(target_common_options target)
 		PRIVATE
 		${CMAKE_CURRENT_SOURCE_DIR}/include
 	)
+	target_link_libraries(${target}
+		PRIVATE
+		phd::embed
+	)
+	if (".c++" STREQUAL ${style})
+		target_compile_options(${target}
+			PRIVATE
+			-std=c++2c
+		)
+		if (${CMAKE_CXX_COMPILER_ID} MATCHES "[Cc]lang")
+			target_compile_options(${target}
+				PRIVATE
+				-Wno-c++2c-extensions
+				-Wno-c23-extensions
+			)
+		endif()
+	else()
+		target_compile_options(${target}
+			PRIVATE
+			-std=c2y
+		)
+	endif()
 endfunction()
 
 if (PHD_EMBED_TESTS)

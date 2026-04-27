@@ -1,4 +1,4 @@
-int main () {
+int main (int, char*[]) {
 #if !__has_embed(__FILE__)
 	return 1;
 #elif !__has_embed(<media/art.txt>)
