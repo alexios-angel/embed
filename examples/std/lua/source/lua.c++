@@ -16,7 +16,7 @@ consteval std::string_view stem_root (std::string_view file) noexcept {
 	return std::string_view(file.data(), last_index);
 }
 
-consteval void recursive_parse (std::string_view file, big_buffer& buf, std::size_t& buf_i, int depth) {
+consteval void recursive_parse_lua (std::string_view file, big_buffer& buf, std::size_t& buf_i, int depth) {
 	auto data = phd::embed<char>(file);
 	for (std::size_t i = 0; i < data.size(); ++i) {
 		const char& c = data[i];
@@ -85,7 +85,7 @@ consteval void recursive_parse (std::string_view file, big_buffer& buf, std::siz
 			++buf_i;
 
 			std::string_view new_file = std::string_view(new_file_buffer.data(), new_file_buffer_i);
-			recursive_parse(new_file, buf, buf_i, depth + 1);
+			recursive_parse_lua(new_file, buf, buf_i, depth + 1);
 			i = file_read_i;
 			break;
 		}
@@ -97,10 +97,10 @@ consteval void recursive_parse (std::string_view file, big_buffer& buf, std::siz
 	}
 }
 
-consteval big_buffer recursive_parse (std::string_view file) {
+consteval big_buffer recursive_parse_lua (std::string_view file) {
 	std::size_t buf_i = 0;
 	big_buffer buffer = {};
-	recursive_parse(file, buffer, buf_i, 0);
+	recursive_parse_lua(file, buffer, buf_i, 0);
 	return buffer;
 }
 
@@ -119,11 +119,11 @@ consteval auto comptime_make_array (const auto& S) {
 int main(int, char*[]) {
 	constexpr auto original_file_span = phd::embed<char>("resources/main.lua");
 	constexpr auto original_file = comptime_make_array<original_file_span.size(), true>(original_file_span);
-	constexpr big_buffer glob = recursive_parse("resources/main.lua");
+	constexpr big_buffer glob = recursive_parse_lua("resources/main.lua");
 
 	std::printf("original file (\"%s\"):\n\n%s", "resources/main.lua", original_file.data());
 	std::printf("\n\n=================================================================================\n");
-	std::printf("`consteval recursive_parse` result:\n\n%s", glob.data());
+	std::printf("`consteval recursive_parse_lua` result:\n\n%s", glob.data());
 
 	return 0;
 }

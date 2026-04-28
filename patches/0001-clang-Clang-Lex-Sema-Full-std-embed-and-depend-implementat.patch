@@ -1,4 +1,4 @@
-From 3615fe911f28bb59dd2d06b1c31e7fcb93521f51 Mon Sep 17 00:00:00 2001
+From d6021368a2c7943e032c46959ae6f187b5630bee Mon Sep 17 00:00:00 2001
 From: ThePhD <phdofthehouse@gmail.com>
 Date: Wed, 1 Apr 2026 19:06:16 +0200
 Subject: [PATCH] =?UTF-8?q?[Clang][Lex][Sema]=20=E2=9C=A8=20Full=20std::em?=
@@ -7,30 +7,22 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
+[Clang][Lex][Sema] 🎉 Full std::embed and #depend implementation!
+
 [Clang][Lex][Sema] 🎨 Change how the builtin returns information by adding a new first argument
-
-- [libcxx] 🎨 add a proper C++29 / __cplusplus-based version macro (embed is still 1 because even -std=c++2c does not change the value much higher)
-
+[libcxx] 🎨 add a proper C++29 / __cplusplus-based version macro (embed is still 1 because even -std=c++2c does not change the value much higher)
 [Clang][Lex][Sema] 🎨 clang-format
-
 [Clang][Frontend] 🐛 Synchronize with Dependency File Collection Improvements
-
 [Clang][AST][Sema] 🎨 rename to clang-specific builtin (no real agreement with GCC after all)
-
 [Clang][Doc][AST][Sema] 🎨 managed to make both the same for GCC, we are back on!
-
 [libc++][Clang][Doc][AST] 🎨🐛 synchronize and update return values
-
 [Clang][Doc] 🐛 fix improper string and code quote sequences in builtin std embed documentation
-
 [Clang][AST][Sema] ✨ Add new locus argument to allow for any implementation to determine how many steps up they want to go in the constexpr callstack
-
 [Clang][AST][Sema][Frontend] Adjust the dependency file checking to output appropriate data
-
 [libc++][Clang-SemaCXX] ✅ Add a new test
+[Clang][Frontend] 📝 It turns out Clang does not fully do Preprocessing before doing the rest of processing. That's a bit of a shame.
+[Clang][Driver, Basic] ✨ C++2d flags for when Clang is finally ready
 
-- 📝 It turns out Clang does not fully do Preprocessing before doing the rest of processing. That's a bit of a shame.
-- ✨ C++2d flags for when Clang is finally ready
 ---
  clang/docs/CommandGuide/clang.rst             |    8 +
  clang/docs/LanguageExtensions.rst             |   90 +
@@ -50,7 +42,7 @@ Content-Transfer-Encoding: 8bit
  clang/include/clang/Lex/Preprocessor.h        |   10 +-
  clang/include/clang/Sema/Sema.h               |    1 +
  clang/lib/AST/ASTContext.cpp                  |   14 +
- clang/lib/AST/ExprConstant.cpp                |  326 ++-
+ clang/lib/AST/ExprConstant.cpp                |  329 ++-
  clang/lib/Basic/CMakeLists.txt                |    2 +
  clang/lib/Basic/IdentifierTable.cpp           |    1 +
  clang/lib/Basic/InputDependencyCollection.cpp |  191 ++
@@ -62,9 +54,10 @@ Content-Transfer-Encoding: 8bit
  clang/lib/Lex/PPDirectives.cpp                |  129 +-
  clang/lib/Lex/Preprocessor.cpp                |   23 +-
  clang/lib/Sema/SemaChecking.cpp               |  181 ++
+ clang/test/Driver/unknown-std.cpp             |    6 +-
  .../Inputs/media/nested/inside.txt            |    1 +
- clang/test/Preprocessor/depend-recursive.cpp  |   13 +
- clang/test/Preprocessor/depend.cpp            |   11 +
+ .../test/Preprocessor/depend-dependencies.cpp |   11 +
+ .../depend-recursive-dependencies.cpp         |   13 +
  clang/test/SemaCXX/Inputs/resources/a/b/empty |    0
  clang/test/SemaCXX/Inputs/resources/art.bin   |    1 +
  .../consteval-builtin-std-embed-art.cpp       |  152 ++
@@ -161,14 +154,14 @@ Content-Transfer-Encoding: 8bit
  .../vector.version.compile.pass.cpp           |   61 +-
  .../version.version.compile.pass.cpp          | 2035 ++++++++++++++++-
  .../generate_feature_test_macro_components.py |    7 +-
- 129 files changed, 7116 insertions(+), 256 deletions(-)
+ 130 files changed, 7123 insertions(+), 258 deletions(-)
  create mode 100644 clang/include/clang/Basic/InputDependencyCollection.h
  create mode 100644 clang/include/clang/Basic/ResourceSearch.h
  create mode 100644 clang/lib/Basic/InputDependencyCollection.cpp
  create mode 100644 clang/lib/Basic/ResourceSearch.cpp
  create mode 100644 clang/test/Preprocessor/Inputs/media/nested/inside.txt
- create mode 100644 clang/test/Preprocessor/depend-recursive.cpp
- create mode 100644 clang/test/Preprocessor/depend.cpp
+ create mode 100644 clang/test/Preprocessor/depend-dependencies.cpp
+ create mode 100644 clang/test/Preprocessor/depend-recursive-dependencies.cpp
  create mode 100644 clang/test/SemaCXX/Inputs/resources/a/b/empty
  create mode 100644 clang/test/SemaCXX/Inputs/resources/art.bin
  create mode 100644 clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp
@@ -597,7 +590,7 @@ index 1eef3a633929..7e9cf43bda33 100644
    bool hasDigraphs() const { return Flags & Digraphs; }
  
 diff --git a/clang/include/clang/Basic/LangStandards.def b/clang/include/clang/Basic/LangStandards.def
-index 4edc93503cdf..c762507c6580 100644
+index 4edc93503cdf..476c9ff55254 100644
 --- a/clang/include/clang/Basic/LangStandards.def
 +++ b/clang/include/clang/Basic/LangStandards.def
 @@ -180,17 +180,30 @@ LANGSTANDARD_ALIAS_DEPR(gnucxx23, "gnu++2b")
@@ -625,7 +618,7 @@ index 4edc93503cdf..c762507c6580 100644
 +LANGSTANDARD_ALIAS(cxx29, "c++29")
 +
 +LANGSTANDARD(gnucxx29, "gnu++2d",
-+             CXX, "Working draft for C++2c with GNU extensions",
++             CXX, "Working draft for C++2d with GNU extensions",
 +             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
 +             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | CPlusPlus29 | Digraphs | HexFloat | GNUMode, 202604)
 +LANGSTANDARD_ALIAS(gnucxx29, "gnu++29")
@@ -812,7 +805,7 @@ index abf5f8a83204..9da9d4729a75 100644
    // Release the DenseMaps associated with DeclContext objects.
    // FIXME: Is this the ideal solution?
 diff --git a/clang/lib/AST/ExprConstant.cpp b/clang/lib/AST/ExprConstant.cpp
-index 1a4c96280107..a944f76bd864 100644
+index 1a4c96280107..2995e8309360 100644
 --- a/clang/lib/AST/ExprConstant.cpp
 +++ b/clang/lib/AST/ExprConstant.cpp
 @@ -53,13 +53,18 @@
@@ -854,7 +847,7 @@ index 1a4c96280107..a944f76bd864 100644
    if (Index < S->getLength())
      Value = S->getCodeUnit(Index);
    return Value;
-@@ -10692,7 +10701,317 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
+@@ -10692,7 +10701,320 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
          return false;
      }
    }
@@ -1001,8 +994,8 @@ index 1a4c96280107..a944f76bd864 100644
 +      }
 +      APSInt BackingArraySizeVal(llvm::APInt(SizeTySize, Size, false), true);
 +      APValue SizeOutResult(BackingArraySizeVal);
-+      if (!handleAssignment(Info, SizeOutArg, SizeOutLVal, SizeOutArg->getType(),
-+                            SizeOutResult)) {
++      if (!handleAssignment(Info, SizeOutArg, SizeOutLVal,
++                            SizeOutArg->getType(), SizeOutResult)) {
 +        return Error(SizeOutArg);
 +      }
 +      return true;
@@ -1060,17 +1053,20 @@ index 1a4c96280107..a944f76bd864 100644
 +      // Subtract 1 from the callstack distance, since where we are already at 1
 +      if (CallStackDistance < 1) {
 +        // 0 means "current", so just... take the current.
-+        FileID ThisFileID = SM.getFileID(Info.CurrentCall->CallRange.getBegin());
++        FileID ThisFileID =
++            SM.getFileID(Info.CurrentCall->CallRange.getBegin());
 +        if (ThisFileID.isValid()) {
 +          ThisFile = SM.getFileEntryRefForID(ThisFileID);
 +        }
 +      } else {
 +        const unsigned int CallStackIndexDistance = CallStackDistance - 1;
-+        const unsigned int TargetFrameIndex = CallStackIndexDistance > Info.CurrentCall->Index
-+          ? 1
-+          : Info.CurrentCall->Index - CallStackIndexDistance;
++        const unsigned int TargetFrameIndex =
++            CallStackIndexDistance > Info.CurrentCall->Index
++                ? 1
++                : Info.CurrentCall->Index - CallStackIndexDistance;
 +        auto TargetFrameAndDepth = Info.getCallFrameAndDepth(TargetFrameIndex);
-+        FileID ThisFileID = SM.getFileID(TargetFrameAndDepth.first->CallRange.getBegin());
++        FileID ThisFileID =
++            SM.getFileID(TargetFrameAndDepth.first->CallRange.getBegin());
 +        if (ThisFileID.isValid()) {
 +          ThisFile = SM.getFileEntryRefForID(ThisFileID);
 +        }
@@ -1105,9 +1101,9 @@ index 1a4c96280107..a944f76bd864 100644
 +      return WriteOutSize(0) && WriteOutStatus(FileFoundAndEmpty);
 +    }
 +    DataSize = std::max<size_t>(
-+        0, std::min<size_t>(
-+               FullDataSize - DataOffset,
-+               MaybeLimit ? *MaybeLimit : std::numeric_limits<size_t>::max()));
++        0, std::min<size_t>(FullDataSize - DataOffset,
++                            MaybeLimit ? *MaybeLimit
++                                       : std::numeric_limits<size_t>::max()));
 +    if (DataSize == 0) {
 +      Result.setNull(Info.Ctx, PtrOutTy);
 +      return WriteOutSize(0) && WriteOutStatus(FileFoundAndEmpty);
@@ -1172,7 +1168,7 @@ index 1a4c96280107..a944f76bd864 100644
    default:
      return false;
    }
-@@ -15365,7 +15684,8 @@ public:
+@@ -15365,7 +15687,8 @@ public:
    bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
      assert(E->getType()->isIntegralOrEnumerationType() &&
             "Invalid evaluation result.");
@@ -1216,7 +1212,7 @@ index a2e9316e4e37..5eac925fb5e6 100644
    CASE( 6, 'm', 'd', module);
 diff --git a/clang/lib/Basic/InputDependencyCollection.cpp b/clang/lib/Basic/InputDependencyCollection.cpp
 new file mode 100644
-index 000000000000..5db0fb605930
+index 000000000000..5f88f079b581
 --- /dev/null
 +++ b/clang/lib/Basic/InputDependencyCollection.cpp
 @@ -0,0 +1,191 @@
@@ -1259,7 +1255,7 @@ index 000000000000..5db0fb605930
 +    // it matches, we can find it
 +    return true;
 +  }
-+  
++
 +  return false;
 +}
 +
@@ -2115,6 +2111,23 @@ index 7caae4e66f5b..65ab63a06212 100644
  /// The result of __builtin_counted_by_ref cannot be assigned to a variable.
  /// It allows leaking and modification of bounds safety information.
  bool Sema::CheckInvalidBuiltinCountedByRef(const Expr *E,
+diff --git a/clang/test/Driver/unknown-std.cpp b/clang/test/Driver/unknown-std.cpp
+index 5c58042a0a2c..6c8fcd441a85 100644
+--- a/clang/test/Driver/unknown-std.cpp
++++ b/clang/test/Driver/unknown-std.cpp
+@@ -22,8 +22,10 @@
+ // CHECK-NEXT: note: use 'gnu++20' for 'ISO C++ 2020 DIS with GNU extensions' standard
+ // CHECK-NEXT: note: use 'c++23' for 'ISO C++ 2023 DIS' standard
+ // CHECK-NEXT: note: use 'gnu++23' for 'ISO C++ 2023 DIS with GNU extensions' standard
+-// CHECK-NEXT: note: use 'c++2c' or 'c++26' for 'Working draft for C++2c' standard
+-// CHECK-NEXT: note: use 'gnu++2c' or 'gnu++26' for 'Working draft for C++2c with GNU extensions' standard
++// CHECK-NEXT: note: use 'c++2c' or 'c++26' for 'Working draft for C++26' standard
++// CHECK-NEXT: note: use 'gnu++2c' or 'gnu++26' for 'Working draft for C++26 with GNU extensions' standard
++// CHECK-NEXT: note: use 'c++2d' or 'c++29' for 'Working draft for C++2d' standard
++// CHECK-NEXT: note: use 'gnu++2d' or 'gnu++29' for 'Working draft for C++2d with GNU extensions' standard
+ 
+ // Make sure that no other output is present.
+ // CHECK-NOT: {{^.+$}}
 diff --git a/clang/test/Preprocessor/Inputs/media/nested/inside.txt b/clang/test/Preprocessor/Inputs/media/nested/inside.txt
 new file mode 100644
 index 000000000000..3293407bc9c9
@@ -2123,13 +2136,30 @@ index 000000000000..3293407bc9c9
 @@ -0,0 +1 @@
 +:3
 \ No newline at end of file
-diff --git a/clang/test/Preprocessor/depend-recursive.cpp b/clang/test/Preprocessor/depend-recursive.cpp
+diff --git a/clang/test/Preprocessor/depend-dependencies.cpp b/clang/test/Preprocessor/depend-dependencies.cpp
 new file mode 100644
-index 000000000000..96a1c1299884
+index 000000000000..5b418623cfc8
 --- /dev/null
-+++ b/clang/test/Preprocessor/depend-recursive.cpp
++++ b/clang/test/Preprocessor/depend-dependencies.cpp
+@@ -0,0 +1,11 @@
++// RUN: %clang_cc1 %s -fsyntax-only -verify -std=c++2d -MMD -MT %s.o --embed-dir=%S/Inputs -dependency-file - | FileCheck %s
++
++#depend <media/*>
++#depend "single_byte.txt"
++// expected-no-diagnostics
++
++// CHECK: depend.cpp.o
++// CHECK-NEXT: depend.cpp
++// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}art.txt
++// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}empty
++// CHECK-NEXT: single_byte.txt
+diff --git a/clang/test/Preprocessor/depend-recursive-dependencies.cpp b/clang/test/Preprocessor/depend-recursive-dependencies.cpp
+new file mode 100644
+index 000000000000..cd6d1d1a4843
+--- /dev/null
++++ b/clang/test/Preprocessor/depend-recursive-dependencies.cpp
 @@ -0,0 +1,13 @@
-+// RUN: %clang_cc1 %s -fsyntax-only -verify -std=c++2d -MT %s.o --embed-dir=%S/Inputs -dependency-file - | FileCheck %s
++// RUN: %clang_cc1 %s -fsyntax-only -verify -std=c++2d -MMD -MT %s.o --embed-dir=%S/Inputs -dependency-file - | FileCheck %s
 +
 +#depend "media/**"
 +#depend <jk.txt>
@@ -2142,23 +2172,6 @@ index 000000000000..96a1c1299884
 +// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}empty
 +// CHECK-NEXT: Inputs{{[/\\]}}jk.txt
 +
-diff --git a/clang/test/Preprocessor/depend.cpp b/clang/test/Preprocessor/depend.cpp
-new file mode 100644
-index 000000000000..a6a725a6d28c
---- /dev/null
-+++ b/clang/test/Preprocessor/depend.cpp
-@@ -0,0 +1,11 @@
-+// RUN: %clang_cc1 %s -fsyntax-only -verify -std=c++2d -MT %s.o --embed-dir=%S/Inputs -dependency-file - | FileCheck %s
-+
-+#depend "media/*"
-+#depend "single_byte.txt"
-+// expected-no-diagnostics
-+
-+// CHECK: depend.cpp.o
-+// CHECK-NEXT: depend.cpp
-+// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}art.txt
-+// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}empty
-+// CHECK-NEXT: single_byte.txt
 diff --git a/clang/test/SemaCXX/Inputs/resources/a/b/empty b/clang/test/SemaCXX/Inputs/resources/a/b/empty
 new file mode 100644
 index 000000000000..e69de29bb2d1
@@ -2172,13 +2185,13 @@ index 000000000000..ae92912e2d08
 \ No newline at end of file
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp
 new file mode 100644
-index 000000000000..6a899c4bd634
+index 000000000000..ab8066220d6d
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp
 @@ -0,0 +1,152 @@
-+// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++2d-extensions -Wno-c++23-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++2d -fsyntax-only --embed-dir=%S/Inputs %s
 +// expected-no-diagnostics
 +
@@ -2233,7 +2246,7 @@ index 000000000000..6a899c4bd634
 +"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20"
 +"\x20\x20\x20\x20\x20\x20\x52\x20\x20\x20\x61\x20\x20\x20\x63\x20\x20\x20\x63\x20\x20\x20\xF0\x9F\xA6\x9D\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20";
 +// clang-format on
-+constexpr const decltype(0zu) v_correct_size = sizeof(v_correct) - 1;
++constexpr const decltype(sizeof(0)) v_correct_size = sizeof(v_correct) - 1;
 +
 +template <typename I0, typename S0, typename I1, typename S1>
 +constexpr bool byte_equal (I0 first0, S0 last0, I1 first1, S1 last1) {
@@ -2245,16 +2258,16 @@ index 000000000000..6a899c4bd634
 +	return first0 == last0 && first1 == last1;
 +}
 +
-+inline constexpr decltype(0zu) sentinel_size = 44203zu;
++inline constexpr decltype(sizeof(0)) sentinel_size = 44203zu;
 +template <typename T>
 +inline constexpr T sentinel_object = {};
 +template <typename T>
-+inline constexpr const T* sentinel_address = &sentinel_object;
++inline constexpr const T* sentinel_address = &sentinel_object<T>;
 +
 +template <typename T>
 +struct inspect {
-+	const T* ptr = sentinel_address;
-+	decltype(0zu) size = sentinel_size;
++	const T* ptr = sentinel_address<T>>
++	decltype(sizeof(0)) size = sentinel_size;
 +	int status = -1;
 +};
 +
@@ -2265,7 +2278,7 @@ index 000000000000..6a899c4bd634
 +	found
 +};
 +
-+template <typename T, typename C, decltype(0zu) N>
++template <typename T, typename C, decltype(sizeof(0)) N>
 +consteval inspect<T> non_local_lookup_core (const C (&name)[N]) {
 +	inspect<T> result;
 +	result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, name, 0);
@@ -2330,13 +2343,13 @@ index 000000000000..6a899c4bd634
 +static_assert(cannot_depend_on());
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp
 new file mode 100644
-index 000000000000..dfdde2255e79
+index 000000000000..d98f7c3c5739
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp
 @@ -0,0 +1,73 @@
-+// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++2d-extensions -Wno-c++23-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++2d -fsyntax-only --embed-dir=%S/Inputs %s
 +// expected-no-diagnostics
 +
@@ -2356,16 +2369,16 @@ index 000000000000..dfdde2255e79
 +	return first0 == last0 && first1 == last1;
 +}
 +
-+inline constexpr decltype(0zu) sentinel_size = 44203zu;
++inline constexpr decltype(sizeof(0)) sentinel_size = 44203;
 +template <typename T>
 +inline constexpr T sentinel_object = {};
 +template <typename T>
-+inline constexpr const T* sentinel_address = &sentinel_object;
++inline constexpr const T* sentinel_address = &sentinel_object<T>;
 +
 +template <typename T>
 +struct inspect {
-+	const T* ptr = sentinel_address;
-+	decltype(0zu) size = sentinel_size;
++	const T* ptr = sentinel_address<T>;
++	decltype(sizeof(0)) size = sentinel_size;
 +	int status = -1;
 +};
 +
@@ -2373,11 +2386,11 @@ index 000000000000..dfdde2255e79
 +	not_found,
 +	found,
 +	no_depend,
-+	found
++	found_empty,
 +};
 +
-+template <typename T, typename C, decltype(0zu) N>
-+consteval inspect<T> non_local_lookup_core (const C (&name)[N]) {
++template <typename T, typename C, decltype(sizeof(0)) N>
++consteval inspect<T> local_lookup_core (const C (&name)[N]) {
 +	inspect<T> result;
 +	result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, name, 0);
 +	return result;
@@ -2387,7 +2400,7 @@ index 000000000000..dfdde2255e79
 +	static constexpr const unsigned char file[] = {
 +#embed __FILE__
 +	};
-+	static constexpr const decltype(0zu) file_size = sizeof(file);
++	static constexpr const decltype(sizeof(0)) file_size = sizeof(file);
 +	constexpr auto v0 = local_lookup_core<unsigned char>(__FILE__);
 +	static_assert(v0.status == found);
 +	static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, &file[0], &file[0] + file_size));
@@ -2409,13 +2422,13 @@ index 000000000000..dfdde2255e79
 +static_assert(local_file());
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed.cpp
 new file mode 100644
-index 000000000000..3041f1fe0002
+index 000000000000..6d1001ac5a10
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed.cpp
 @@ -0,0 +1,185 @@
-+// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++-2d-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++2d-extensions -Wno-c++23-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++2d -fsyntax-only --embed-dir=%S/Inputs %s
 +// expected-no-diagnostics
 +
@@ -2424,7 +2437,7 @@ index 000000000000..3041f1fe0002
 +	enum class byte : unsigned char {};
 +}
 +
-+inline constexpr decltype(0zu) sentinel_size = 44203zu;
++inline constexpr decltype(sizeof(0)) sentinel_size = 44203zu;
 +template <typename T>
 +inline constexpr T sentinel_object = {};
 +template <typename T>
@@ -2433,7 +2446,7 @@ index 000000000000..3041f1fe0002
 +template <typename T>
 +struct inspect {
 +	const T* ptr = sentinel_address<T>;
-+	decltype(0zu) size = sentinel_size;
++	decltype(sizeof(0)) size = sentinel_size;
 +	int status = -1;
 +};
 +
@@ -2452,14 +2465,14 @@ index 000000000000..3041f1fe0002
 +	return result;
 +}
 +
-+template <typename T, typename C, decltype(0zu) N>
++template <typename T, typename C, decltype(sizeof(0)) N>
 +consteval inspect<T> non_local_lookup_core (const C (&name)[N]) {
 +	inspect<T> result = {};
 +	result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, &name[0], 0);
 +	return result;
 +}
 +
-+template <typename T, typename C, decltype(0zu) N>
++template <typename T, typename C, decltype(sizeof(0)) N>
 +consteval inspect<T> local_lookup_core (const C (&name)[N]) {
 +	inspect<T> result = {};
 +	result.ptr = __builtin_std_embed(0b001, result.status, result.size, result.ptr, (N)-1, &name[0], 0);
@@ -9607,5 +9620,5 @@ index 3770f026009c..30ff46eb8d67 100644
  
  
 -- 
-2.53.0
+2.54.0
 
