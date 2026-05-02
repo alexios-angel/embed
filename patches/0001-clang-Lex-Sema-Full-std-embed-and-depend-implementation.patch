@@ -1,37 +1,39 @@
-From d6021368a2c7943e032c46959ae6f187b5630bee Mon Sep 17 00:00:00 2001
+From 9765313d945f6d10e8e3ffb12e0ff7177f7d9f7f Mon Sep 17 00:00:00 2001
 From: ThePhD <phdofthehouse@gmail.com>
 Date: Wed, 1 Apr 2026 19:06:16 +0200
-Subject: [PATCH] =?UTF-8?q?[Clang][Lex][Sema]=20=E2=9C=A8=20Full=20std::em?=
+Subject: [PATCH] =?UTF-8?q?[clang][Lex][Sema]=20=E2=9C=A8=20Full=20std::em?=
  =?UTF-8?q?bed=20and=20#depend=20implementation?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-[Clang][Lex][Sema] 🎉 Full std::embed and #depend implementation!
+- [clang][Lex][Sema] 🎨 Change how the builtin returns information by adding a new first argument
+- [libcxx] 🎨 add a proper C++29 / __cplusplus-based version macro (embed is still 1 because even -std=c++2c does not change the value much higher)
+- [clang][Lex][Sema] 🎨 clang-format
+- [clang][Frontend] 🐛 Synchronize with Dependency File Collection Improvements
+- [clang][AST][Sema] 🎨 rename to clang-specific builtin (no real agreement with GCC after all)
+- [clang][doc][AST][Sema] 🎨 managed to make both the same for GCC, we are back on!
+- [libc++][clang][doc][AST] 🎨🐛 synchronize and update return values
+- [clang][doc] 🐛 fix improper string and code quote sequences in builtin std embed documentation
+- [clang][AST][Sema] ✨ Add new locus argument to allow for any implementation to determine how many steps up they want to go in the constexpr callstack
+- [clang][AST][Sema][Frontend] Adjust the dependency file checking to output appropriate data
+- [libc++][clang-SemaCXX][clang-Preprocessor] ✅ Add a new tests
+- [clang][Lex] 📝 It turns out Clang does not fully do Preprocessing before doing the rest of processing. That's a bit of a shame.
+- [clang][Frontend] ✨ C++2d flags for when Clang is finally ready
+- [clang] 🎨 apply clang-format
 
-[Clang][Lex][Sema] 🎨 Change how the builtin returns information by adding a new first argument
-[libcxx] 🎨 add a proper C++29 / __cplusplus-based version macro (embed is still 1 because even -std=c++2c does not change the value much higher)
-[Clang][Lex][Sema] 🎨 clang-format
-[Clang][Frontend] 🐛 Synchronize with Dependency File Collection Improvements
-[Clang][AST][Sema] 🎨 rename to clang-specific builtin (no real agreement with GCC after all)
-[Clang][Doc][AST][Sema] 🎨 managed to make both the same for GCC, we are back on!
-[libc++][Clang][Doc][AST] 🎨🐛 synchronize and update return values
-[Clang][Doc] 🐛 fix improper string and code quote sequences in builtin std embed documentation
-[Clang][AST][Sema] ✨ Add new locus argument to allow for any implementation to determine how many steps up they want to go in the constexpr callstack
-[Clang][AST][Sema][Frontend] Adjust the dependency file checking to output appropriate data
-[libc++][Clang-SemaCXX] ✅ Add a new test
-[Clang][Frontend] 📝 It turns out Clang does not fully do Preprocessing before doing the rest of processing. That's a bit of a shame.
-[Clang][Driver, Basic] ✨ C++2d flags for when Clang is finally ready
-
+Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
+Signed-off-by: ThePhD <phdofthehouse@gmail.com>
 ---
  clang/docs/CommandGuide/clang.rst             |    8 +
- clang/docs/LanguageExtensions.rst             |   90 +
+ clang/docs/LanguageExtensions.rst             |   93 +
  clang/docs/ReleaseNotes.rst                   |    3 +
  clang/docs/ReleaseNotesTemplate.txt           |    3 +
  clang/include/clang/AST/ASTContext.h          |   15 +
  clang/include/clang/Basic/Builtins.td         |    7 +
  clang/include/clang/Basic/DiagnosticGroups.td |   14 +-
  .../include/clang/Basic/DiagnosticLexKinds.td |    3 +
+ .../clang/Basic/DiagnosticSemaKinds.td        |    5 +
  .../clang/Basic/InputDependencyCollection.h   |   66 +
  clang/include/clang/Basic/LangOptions.def     |    1 +
  clang/include/clang/Basic/LangStandard.h      |   28 +-
@@ -39,7 +41,7 @@ Content-Transfer-Encoding: 8bit
  clang/include/clang/Basic/ResourceSearch.h    |   37 +
  clang/include/clang/Basic/TokenKinds.def      |    2 +
  clang/include/clang/Lex/PPCallbacks.h         |   18 +
- clang/include/clang/Lex/Preprocessor.h        |   10 +-
+ clang/include/clang/Lex/Preprocessor.h        |   11 +
  clang/include/clang/Sema/Sema.h               |    1 +
  clang/lib/AST/ASTContext.cpp                  |   14 +
  clang/lib/AST/ExprConstant.cpp                |  329 ++-
@@ -51,18 +53,20 @@ Content-Transfer-Encoding: 8bit
  clang/lib/Frontend/ASTUnit.cpp                |    8 +-
  clang/lib/Frontend/CompilerInstance.cpp       |    2 +
  clang/lib/Frontend/DependencyFile.cpp         |  101 +-
- clang/lib/Lex/PPDirectives.cpp                |  129 +-
- clang/lib/Lex/Preprocessor.cpp                |   23 +-
- clang/lib/Sema/SemaChecking.cpp               |  181 ++
+ clang/lib/Lex/PPDirectives.cpp                |  124 +-
+ clang/lib/Lex/Preprocessor.cpp                |   32 +
+ clang/lib/Sema/SemaChecking.cpp               |  140 ++
  clang/test/Driver/unknown-std.cpp             |    6 +-
  .../Inputs/media/nested/inside.txt            |    1 +
  .../test/Preprocessor/depend-dependencies.cpp |   11 +
- .../depend-recursive-dependencies.cpp         |   13 +
+ .../depend-export-dependencies.cpp            |   13 +
+ .../depend-recursive-dependencies.cpp         |   12 +
  clang/test/SemaCXX/Inputs/resources/a/b/empty |    0
  clang/test/SemaCXX/Inputs/resources/art.bin   |    1 +
- .../consteval-builtin-std-embed-art.cpp       |  152 ++
+ .../consteval-builtin-std-embed-art.cpp       |  198 ++
+ .../consteval-builtin-std-embed-errors.cpp    |   40 +
  ...consteval-builtin-std-embed-local_file.cpp |   73 +
- .../SemaCXX/consteval-builtin-std-embed.cpp   |  185 ++
+ .../SemaCXX/consteval-builtin-std-embed.cpp   |  186 ++
  .../clang-import-test/clang-import-test.cpp   |    2 +
  clang/unittests/Lex/PPCallbacksTest.cpp       |    1 +
  clang/www/OpenProjects.html                   |    2 +-
@@ -75,8 +79,13 @@ Content-Transfer-Encoding: 8bit
  libcxx/docs/index.rst                         |    2 +
  libcxx/include/CMakeLists.txt                 |    1 +
  libcxx/include/__configuration/language.h     |    6 +-
- libcxx/include/embed                          |  177 ++
+ libcxx/include/embed                          |  175 ++
  libcxx/include/version                        |    5 +
+ libcxx/test/std/embed/a.txt                   |    1 +
+ .../test/std/embed/embed-mandates.verify.cpp  |   34 +
+ .../test/std/embed/embed-nodiscard.verify.cpp |   43 +
+ .../std/embed/embed-post-conditions.pass.cpp  |   50 +
+ libcxx/test/std/embed/empty                   |    0
  .../algorithm.version.compile.pass.cpp        |  108 +-
  .../any.version.compile.pass.cpp              |   13 +-
  .../array.version.compile.pass.cpp            |   40 +-
@@ -154,17 +163,19 @@ Content-Transfer-Encoding: 8bit
  .../vector.version.compile.pass.cpp           |   61 +-
  .../version.version.compile.pass.cpp          | 2035 ++++++++++++++++-
  .../generate_feature_test_macro_components.py |    7 +-
- 130 files changed, 7123 insertions(+), 258 deletions(-)
+ 138 files changed, 7331 insertions(+), 247 deletions(-)
  create mode 100644 clang/include/clang/Basic/InputDependencyCollection.h
  create mode 100644 clang/include/clang/Basic/ResourceSearch.h
  create mode 100644 clang/lib/Basic/InputDependencyCollection.cpp
  create mode 100644 clang/lib/Basic/ResourceSearch.cpp
  create mode 100644 clang/test/Preprocessor/Inputs/media/nested/inside.txt
  create mode 100644 clang/test/Preprocessor/depend-dependencies.cpp
+ create mode 100644 clang/test/Preprocessor/depend-export-dependencies.cpp
  create mode 100644 clang/test/Preprocessor/depend-recursive-dependencies.cpp
  create mode 100644 clang/test/SemaCXX/Inputs/resources/a/b/empty
  create mode 100644 clang/test/SemaCXX/Inputs/resources/art.bin
  create mode 100644 clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp
+ create mode 100644 clang/test/SemaCXX/consteval-builtin-std-embed-errors.cpp
  create mode 100644 clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp
  create mode 100644 clang/test/SemaCXX/consteval-builtin-std-embed.cpp
  create mode 100644 libcxx/docs/Status/Cxx2d.rst
@@ -172,6 +183,11 @@ Content-Transfer-Encoding: 8bit
  create mode 100644 libcxx/docs/Status/Cxx2dIssues.csvgb
  create mode 100644 libcxx/docs/Status/Cxx2dPapers.csv
  create mode 100644 libcxx/include/embed
+ create mode 100644 libcxx/test/std/embed/a.txt
+ create mode 100644 libcxx/test/std/embed/embed-mandates.verify.cpp
+ create mode 100644 libcxx/test/std/embed/embed-nodiscard.verify.cpp
+ create mode 100644 libcxx/test/std/embed/embed-post-conditions.pass.cpp
+ create mode 100644 libcxx/test/std/embed/empty
  create mode 100644 libcxx/test/std/language.support/support.limits/support.limits.general/embed.version.compile.pass.cpp
 
 diff --git a/clang/docs/CommandGuide/clang.rst b/clang/docs/CommandGuide/clang.rst
@@ -194,18 +210,21 @@ index d8c70bdc43b1..c4dcca3d093f 100644
  
   Supported values for the OpenCL language are:
 diff --git a/clang/docs/LanguageExtensions.rst b/clang/docs/LanguageExtensions.rst
-index e2e98604008e..6b475719df9c 100644
+index e2e98604008e..5d6919d2eab8 100644
 --- a/clang/docs/LanguageExtensions.rst
 +++ b/clang/docs/LanguageExtensions.rst
-@@ -5474,6 +5474,96 @@ manner as the above four builtins, except that ``_M_function_name`` is populated
+@@ -5474,6 +5474,99 @@ manner as the above four builtins, except that ``_M_function_name`` is populated
  with ``__PRETTY_FUNCTION__`` rather than ``__FUNCTION__``.
  
  
 +Data embedding builtin ``__builtin_std_embed``
 +----------------------------------------------
 +
-+For use with `p1040 <https://wg21.link/p1040>`'s ``std::embed`` function. It
-+is conceptually (but not exactly) represented by the following overloads:
++For use with `p1040's <https://wg21.link/p1040>`_ ``std::embed`` function. It
++is conceptually (but not exactly) represented by the following template
++function overloads:
++
++**Syntax**
 +
 +.. code-block:: c++
 +
@@ -238,9 +257,9 @@ index e2e98604008e..6b475719df9c 100644
 +filled with:
 +
 +- ``0`` is the file is not found.
-+- ``1`` if the file is found, properly ``#depend``ed on, and not empty.
-+- ``2`` if the file is found, properly ``#depend``ed on, but it was empty,
-+- or, ``3`` if the file is found but not suitably ``#depend``ed on.
++- ``1`` if the file is found, properly ``#depend``-ed on, and not empty.
++- ``2`` if the file is found but not suitably ``#depend``-ed on,
++- or, ``3`` if the file is found, properly ``#depend``-ed on, but it was empty.
 +
 +The ``size`` argument is an output parameter for the number of elements pointed
 +to by the return type. If ``limit`` is provided, this value will be less than
@@ -295,7 +314,7 @@ index e2e98604008e..6b475719df9c 100644
  ------------------
  Clang provides builtins to support checking and adjusting alignment of
 diff --git a/clang/docs/ReleaseNotes.rst b/clang/docs/ReleaseNotes.rst
-index ec64c2008d89..421574d5c6e4 100644
+index fdafc4871ed1..2690b0df0c08 100644
 --- a/clang/docs/ReleaseNotes.rst
 +++ b/clang/docs/ReleaseNotes.rst
 @@ -141,6 +141,9 @@ C++ Language Changes
@@ -395,7 +414,7 @@ index 4a7eaeb3d353..95f1a7e8f9e4 100644
  def EHReturn : Builtin {
    let Spellings = ["__builtin_eh_return"];
 diff --git a/clang/include/clang/Basic/DiagnosticGroups.td b/clang/include/clang/Basic/DiagnosticGroups.td
-index 74f9fab14d82..5e6ecbc11d17 100644
+index 2b3055d6d6bd..b5d8fc7cd733 100644
 --- a/clang/include/clang/Basic/DiagnosticGroups.td
 +++ b/clang/include/clang/Basic/DiagnosticGroups.td
 @@ -410,8 +410,9 @@ def CXXPre23CompatPedantic :
@@ -419,7 +438,7 @@ index 74f9fab14d82..5e6ecbc11d17 100644
  def ExitTimeDestructors : DiagGroup<"exit-time-destructors">;
  def FlexibleArrayExtensions : DiagGroup<"flexible-array-extensions">;
  def FourByteMultiChar : DiagGroup<"four-char-constants">;
-@@ -1527,12 +1530,17 @@ def CXX23 : DiagGroup<"c++23-extensions", [CXX23AttrsOnLambda]>;
+@@ -1526,12 +1529,17 @@ def CXX23 : DiagGroup<"c++23-extensions", [CXX23AttrsOnLambda]>;
  // earlier C++ versions.
  def CXX26 : DiagGroup<"c++26-extensions">;
  
@@ -439,7 +458,7 @@ index 74f9fab14d82..5e6ecbc11d17 100644
  def DelegatingCtorCycles :
    DiagGroup<"delegating-ctor-cycles">;
 diff --git a/clang/include/clang/Basic/DiagnosticLexKinds.td b/clang/include/clang/Basic/DiagnosticLexKinds.td
-index 2846db832027..06bfe553fad7 100644
+index 85fa290de6fd..0e5ab7c7bfd9 100644
 --- a/clang/include/clang/Basic/DiagnosticLexKinds.td
 +++ b/clang/include/clang/Basic/DiagnosticLexKinds.td
 @@ -467,6 +467,8 @@ def warn_c23_compat_warning_directive : Warning<
@@ -459,6 +478,22 @@ index 2846db832027..06bfe553fad7 100644
  def err_pp_macro_not_identifier : Error<"macro name must be an identifier">;
  def err_pp_missing_macro_name : Error<"macro name missing">;
  def err_pp_missing_rparen_in_macro_def : Error<
+diff --git a/clang/include/clang/Basic/DiagnosticSemaKinds.td b/clang/include/clang/Basic/DiagnosticSemaKinds.td
+index 1302c4296885..bc9538751f7f 100644
+--- a/clang/include/clang/Basic/DiagnosticSemaKinds.td
++++ b/clang/include/clang/Basic/DiagnosticSemaKinds.td
+@@ -850,6 +850,11 @@ def err_builtin_definition : Error<"definition of builtin function %0">;
+ def err_builtin_redeclare : Error<"cannot redeclare builtin function %0">;
+ def err_invalid_builtin_argument : Error<"invalid argument '%0' to %1">;
+ 
++/// __builtin_std_embed type checking errors
++def err_invalid_builtin_std_embed_argument : Error<
++  "invalid argument to '__builtin_std_embed': %0 should be %1">;
++
++
+ def err_arm_invalid_specialreg : Error<"invalid special register for builtin">;
+ def err_arm_invalid_coproc : Error<"coprocessor %0 must be configured as "
+   "%select{GCP|CDE}1">;
 diff --git a/clang/include/clang/Basic/InputDependencyCollection.h b/clang/include/clang/Basic/InputDependencyCollection.h
 new file mode 100644
 index 000000000000..d29a9e4192f3
@@ -726,7 +761,7 @@ index 51c6a31e143b..0d8e1375fd2c 100644
                          bool ForPragma) override {
      First->EnteredSubmodule(M, ImportLoc, ForPragma);
 diff --git a/clang/include/clang/Lex/Preprocessor.h b/clang/include/clang/Lex/Preprocessor.h
-index 8830294ea165..f3c8b34f0801 100644
+index 8830294ea165..9592f5b4a195 100644
 --- a/clang/include/clang/Lex/Preprocessor.h
 +++ b/clang/include/clang/Lex/Preprocessor.h
 @@ -17,6 +17,7 @@
@@ -748,17 +783,18 @@ index 8830294ea165..f3c8b34f0801 100644
    /// Returns a pointer into the given file's buffer that's guaranteed
    /// to be between tokens. The returned pointer is always before \p Start.
    /// The maximum distance betweenthe returned pointer and \p Start is
-@@ -1806,7 +1811,8 @@ public:
-   void LexTokensUntilEOF(std::vector<Token> *Tokens = nullptr);
- 
+@@ -1808,6 +1813,10 @@ public:
    /// Lex a token, forming a header-name token if possible.
--  bool LexHeaderName(Token &Result, bool AllowMacroExpansion = true);
-+  bool LexHeaderName(Token &Result, bool AllowMacroExpansion = true,
-+                     bool SkipFirst = false);
+   bool LexHeaderName(Token &Result, bool AllowMacroExpansion = true);
  
++  /// Lex a token, forming a header-name token if possible.
++  bool LexHeaderNameWithExport(Token &Result, bool *MaybeHasExport,
++                               bool AllowMacroExpansion = true);
++
    /// Lex the parameters for an #embed directive, returns nullopt on error.
    std::optional<LexEmbedParametersResult> LexEmbedParameters(Token &Current,
-@@ -2888,6 +2894,8 @@ private:
+                                                              bool ForHasEmbed);
+@@ -2888,6 +2897,8 @@ private:
        const FileEntry *LookupFromFile, StringRef &LookupFilename,
        SmallVectorImpl<char> &RelativePath, SmallVectorImpl<char> &SearchPath,
        ModuleMap::KnownHeader &SuggestedModule, bool isAngled);
@@ -768,7 +804,7 @@ index 8830294ea165..f3c8b34f0801 100644
    void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok);
    void HandleEmbedDirectiveImpl(SourceLocation HashLoc,
 diff --git a/clang/include/clang/Sema/Sema.h b/clang/include/clang/Sema/Sema.h
-index f9bf3e4de0a5..2e8b29d3ca84 100644
+index 8f98e104d379..a5153e57b498 100644
 --- a/clang/include/clang/Sema/Sema.h
 +++ b/clang/include/clang/Sema/Sema.h
 @@ -3053,6 +3053,7 @@ private:
@@ -780,7 +816,7 @@ index f9bf3e4de0a5..2e8b29d3ca84 100644
    // Matrix builtin handling.
    ExprResult BuiltinMatrixTranspose(CallExpr *TheCall, ExprResult CallResult);
 diff --git a/clang/lib/AST/ASTContext.cpp b/clang/lib/AST/ASTContext.cpp
-index abf5f8a83204..9da9d4729a75 100644
+index a0894318dbd5..b469e3fc17f8 100644
 --- a/clang/lib/AST/ASTContext.cpp
 +++ b/clang/lib/AST/ASTContext.cpp
 @@ -903,6 +903,20 @@ ASTContext::ASTContext(LangOptions &LOpts, SourceManager &SM,
@@ -1563,7 +1599,7 @@ index 05ae1f348f92..450e44796cd6 100644
      AST->Ctx->setPrintingPolicy(PrintingPolicy(*AST->LangOpts));
  
 diff --git a/clang/lib/Frontend/CompilerInstance.cpp b/clang/lib/Frontend/CompilerInstance.cpp
-index f868e1e44932..961ec7f06ffa 100644
+index 91eda7392784..f72cf5071038 100644
 --- a/clang/lib/Frontend/CompilerInstance.cpp
 +++ b/clang/lib/Frontend/CompilerInstance.cpp
 @@ -557,6 +557,8 @@ void CompilerInstance::createASTContext() {
@@ -1709,7 +1745,7 @@ index d56e17f14e9b..e463347c7efb 100644
    PP.addPPCallbacks(std::make_unique<DepCollectorPPCallbacks>(*this, PP));
    PP.getHeaderSearchInfo().getModuleMap().addModuleMapCallbacks(
 diff --git a/clang/lib/Lex/PPDirectives.cpp b/clang/lib/Lex/PPDirectives.cpp
-index 6e90f20572f1..4b42827846aa 100644
+index 6e90f20572f1..cddcbb9af107 100644
 --- a/clang/lib/Lex/PPDirectives.cpp
 +++ b/clang/lib/Lex/PPDirectives.cpp
 @@ -19,6 +19,7 @@
@@ -1814,7 +1850,7 @@ index 6e90f20572f1..4b42827846aa 100644
      case tok::pp_assert:
        //isExtension = true;  // FIXME: implement #assert
        break;
-@@ -4197,6 +4139,61 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
+@@ -4197,6 +4139,56 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
    HandleEmbedDirectiveImpl(HashLoc, *Params, BinaryContents, FilenameToGo);
  }
  
@@ -1828,13 +1864,8 @@ index 6e90f20572f1..4b42827846aa 100644
 +  // future so we should parse it normally
 +  bool IsExported = false;
 +  Token PatternTok;
-+  Lex(PatternTok);
-+  if (PatternTok.is(tok::kw_export)) {
-+    IsExported = true;
-+  }
-+
-+  // Parse the pattern header-name, with a potential first skip
-+  if (LexHeaderName(PatternTok, true, !IsExported)) {
++  // Parse the pattern header-name, with a potential skip for export keyword
++  if (LexHeaderNameWithExport(PatternTok, &IsExported)) {
 +    return;
 +  }
 +
@@ -1877,46 +1908,62 @@ index 6e90f20572f1..4b42827846aa 100644
  ///
  /// pp-import:
 diff --git a/clang/lib/Lex/Preprocessor.cpp b/clang/lib/Lex/Preprocessor.cpp
-index b08459632aac..9bfd7dbfee2a 100644
+index b08459632aac..c1cce240ff0d 100644
 --- a/clang/lib/Lex/Preprocessor.cpp
 +++ b/clang/lib/Lex/Preprocessor.cpp
-@@ -1072,18 +1072,21 @@ void Preprocessor::LexTokensUntilEOF(std::vector<Token> *Tokens) {
- ///        token is a '<').
+@@ -1073,8 +1073,30 @@ void Preprocessor::LexTokensUntilEOF(std::vector<Token> *Tokens) {
  /// \return \c true if we reached EOD or EOF while looking for a > token in
  ///         a concatenated header name and diagnosed it. \c false otherwise.
--bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
-+bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion,
-+                                 bool SkipFirst) {
+ bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
++  return LexHeaderNameWithExport(FilenameTok, nullptr, AllowMacroExpansion);
++}
++
++/// Lex a header-name token (including one formed from header-name-tokens if
++/// \p AllowMacroExpansion is \c true).
++///
++/// \param FilenameTok Filled in with the next token. On success, this will
++///        be either a header_name token. On failure, it will be whatever other
++///        token was found instead.
++/// \param MaybeExportTok Set if there is a token preceding the filename that
++///        is the keyword "export". Used for #depend export[opt] ...
++///        clauses.
++/// \param AllowMacroExpansion If \c true, allow the header name to be formed
++///        by macro expansion (concatenating tokens as necessary if the first
++///        token is a '<').
++/// \return \c true if we reached EOD or EOF while looking for a > token in
++///         a concatenated header name and diagnosed it. \c false otherwise.
++bool Preprocessor::LexHeaderNameWithExport(Token &FilenameTok,
++                                           bool *MaybeExportTok,
++                                           bool AllowMacroExpansion) {
    // Lex using header-name tokenization rules if tokens are being lexed from
    // a file. Just grab a token normally if we're in a macro expansion.
--  if (CurPPLexer) {
--    // Avoid nested header-name lexing when macro expansion recurses
--    // __has_include(__has_include))
--    if (CurPPLexer->ParsingFilename)
--      LexUnexpandedToken(FilenameTok);
--    else
--      CurPPLexer->LexIncludeFilename(FilenameTok);
--  } else {
--    Lex(FilenameTok);
-+  if (!SkipFirst) {
-+    if (CurPPLexer) {
-+      // Avoid nested header-name lexing when macro expansion recurses
-+      // __has_include(__has_include))
-+      if (CurPPLexer->ParsingFilename)
-+        LexUnexpandedToken(FilenameTok);
-+      else
-+        CurPPLexer->LexIncludeFilename(FilenameTok);
-+    } else {
-+      Lex(FilenameTok);
-+    }
++  bool SeenExport = false;
++header_name_start:
+   if (CurPPLexer) {
+     // Avoid nested header-name lexing when macro expansion recurses
+     // __has_include(__has_include))
+@@ -1086,6 +1108,16 @@ bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
+     Lex(FilenameTok);
    }
  
++  if (!SeenExport && MaybeExportTok != nullptr) {
++    if (FilenameTok.is(tok::kw_export)) {
++      *MaybeExportTok = true;
++      SeenExport = true;
++      goto header_name_start;
++    } else {
++      *MaybeExportTok = false;
++    }
++  }
++
    // This could be a <foo/bar.h> file coming from a macro expansion.  In this
+   // case, glue the tokens together into an angle_string_literal token.
+   SmallString<128> FilenameBuffer;
 diff --git a/clang/lib/Sema/SemaChecking.cpp b/clang/lib/Sema/SemaChecking.cpp
-index 7caae4e66f5b..65ab63a06212 100644
+index eb957df6f1e9..8cb7d6908dcf 100644
 --- a/clang/lib/Sema/SemaChecking.cpp
 +++ b/clang/lib/Sema/SemaChecking.cpp
-@@ -3934,6 +3934,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
+@@ -3941,6 +3941,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
      if (BuiltinCountedByRef(TheCall))
        return ExprError();
      break;
@@ -1930,7 +1977,7 @@ index 7caae4e66f5b..65ab63a06212 100644
    }
  
    if (getLangOpts().HLSL && HLSL().CheckBuiltinFunctionCall(BuiltinID, TheCall))
-@@ -6850,6 +6857,180 @@ bool Sema::BuiltinCountedByRef(CallExpr *TheCall) {
+@@ -6857,6 +6864,139 @@ bool Sema::BuiltinCountedByRef(CallExpr *TheCall) {
    return false;
  }
  
@@ -1959,8 +2006,9 @@ index 7caae4e66f5b..65ab63a06212 100644
 +  // Locus argument type
 +  QualType LocusTy = Locus->getType();
 +  if (!LocusTy->isIntegralOrUnscopedEnumerationType()) {
-+    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_argument)
-+        << Locus << "__builtin_std_embed" << Locus->getSourceRange();
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_embed_argument)
++        << Locus << "an integral type with a non-negative value"
++        << Locus->getSourceRange();
 +    return true;
 +  }
 +
@@ -1968,8 +2016,8 @@ index 7caae4e66f5b..65ab63a06212 100644
 +  QualType StatusRefTy = StatusRef->getType();
 +  if ((!StatusRefTy->isIntegralOrUnscopedEnumerationType()) ||
 +      StatusRefTy.isConstant(Context) || !StatusRef->isLValue()) {
-+    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_argument)
-+        << StatusRef << "__builtin_std_embed" << StatusRef->getSourceRange();
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_embed_argument)
++        << StatusRef << "'int&'" << StatusRef->getSourceRange();
 +    return true;
 +  }
 +
@@ -1977,20 +2025,19 @@ index 7caae4e66f5b..65ab63a06212 100644
 +  QualType SizeRefTy = SizeRef->getType();
 +  if ((!SizeRefTy->isIntegralOrUnscopedEnumerationType()) ||
 +      SizeRefTy.isConstant(Context) || !SizeRef->isLValue()) {
-+    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_argument)
-+        << SizeRef << "__builtin_std_embed" << SizeRef->getSourceRange();
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_embed_argument)
++        << SizeRef << "'size_t&'" << SizeRef->getSourceRange();
 +    return true;
 +  }
 +
 +  // value pointer, has to be non-constant (but pointer to `const`).
 +  // tells us what the type for the builtin return is as well.
-+  // note we have to strip it because the `...` in the Builtins.td causes
-+  // it to be treated as an RValue, and we need to peel that off so it can be
-+  // treated as an LValue, if possible.
 +  QualType PtrRefTy = PtrRef->getType();
 +  if (!PtrRefTy->isPointerType() || PtrRefTy.isConstant(Context)) {
-+    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_argument)
-+        << PtrRefTy << "__builtin_std_embed" << PtrRef->getSourceRange();
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_embed_argument)
++        << PtrRefTy
++        << "a pointer to const 'char', 'unsigned char', or 'std::byte'"
++        << PtrRef->getSourceRange();
 +    return true;
 +  }
 +  QualType ArrElementTy = PtrRefTy->getPointeeType();
@@ -1998,105 +2045,64 @@ index 7caae4e66f5b..65ab63a06212 100644
 +      !(Context.getTypeSize(ArrElementTy) == CharSize &&
 +        Context.getTypeAlign(ArrElementTy) == CharSize &&
 +        ArrElementTy->isIntegralOrEnumerationType())) {
-+    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_argument)
-+        << PtrRef << "__builtin_std_embed" << PtrRef->getSourceRange();
-+    return true;
-+  }
-+
-+  if (!(ArrElementTy->isIntegralOrEnumerationType() &&
-+        Context.getTypeSize(ArrElementTy) == CharSize &&
-+        Context.getTypeAlign(ArrElementTy) == CharSize)) {
-+    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_argument)
-+        << PtrRef << "__builtin_std_embed" << PtrRef->getSourceRange();
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_embed_argument)
++        << PtrRefTy
++        << "a pointer to const 'char', 'unsigned char', or 'std::byte'"
++        << PtrRef->getSourceRange();
 +    return true;
 +  }
 +
 +  // Next argument is size of the string
-+  const QualType SizeType = Context.getSizeType();
 +  QualType ResourceNameSizeTy = ResourceNameSize->getType();
 +  if (!ResourceNameSizeTy->isIntegralOrEnumerationType()) {
-+    Expr *ResourceNameSizeMutable = const_cast<Expr *>(ResourceNameSize);
-+    ExprResult ImplicitResourceNameSizeFixupResult = PerformImplicitConversion(
-+        ResourceNameSizeMutable, SizeType, AssignmentAction::Passing);
-+    if (!ImplicitResourceNameSizeFixupResult.isUsable()) {
-+      Diag(TheCall->getBeginLoc(),
-+           diag::err_typecheck_converted_constant_expression)
-+          << ResourceNameSizeTy << SizeType;
-+      return true;
-+    }
-+    // The implicit conversion worked -- adjust the builtin's argument.
-+    TheCall->setArg(ResourceNameSizeIndex,
-+                    ImplicitResourceNameSizeFixupResult.get());
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_embed_argument)
++        << ResourceNameSizeTy << "an integral type with a non-negative value"
++        << ResourceNameSize->getSourceRange();
++    return true;
 +  }
 +
 +  // Pointer to an appropriate string type
 +  // (char, wchar_t, or char8_t)
 +  QualType ResourceNamePtrTy = ResourceNamePtr->getType();
 +  if (!ResourceNamePtrTy->isPointerType()) {
-+    const QualType AllowedTypes[3] = {Context.getPointerType(Context.CharTy),
-+                                      Context.getPointerType(Context.WCharTy),
-+                                      Context.getPointerType(Context.Char8Ty)};
-+    Expr *ResourceNamePtrMutable = const_cast<Expr *>(ResourceNamePtr);
-+    ExprResult ImplicitResourceNamePtrFixupResult;
-+    for (const QualType &DesiredType : AllowedTypes) {
-+      ImplicitResourceNamePtrFixupResult = PerformImplicitConversion(
-+          ResourceNamePtrMutable, DesiredType, AssignmentAction::Passing);
-+      if (ImplicitResourceNamePtrFixupResult.isUsable()) {
-+        break;
-+      }
-+    }
-+    if (!ImplicitResourceNamePtrFixupResult.isUsable()) {
-+      Diag(ResourceNamePtr->getBeginLoc(),
-+           diag::err_typecheck_converted_constant_expression)
-+          << ResourceNamePtrTy << "a pointer to char, wchar_t, or char8_t";
-+      return true;
-+    }
-+    TheCall->setArg(ResourceNamePtrIndex,
-+                    ImplicitResourceNamePtrFixupResult.get());
-+    ResourceNamePtr = TheCall->getArg(ResourceNamePtrIndex);
-+    ResourceNamePtrTy = ResourceNamePtr->getType();
++    Diag(ResourceNamePtr->getBeginLoc(),
++         diag::err_invalid_builtin_std_embed_argument)
++        << ResourceNamePtrTy
++        << "a pointer to (possibly qualified) 'char', 'wchar_t', or 'char8_t'"
++        << ResourceNamePtr->getSourceRange();
++    return true;
 +  }
 +  QualType ResourceNameCharTy(ResourceNamePtrTy->getPointeeOrArrayElementType(),
 +                              0);
 +  if (!ResourceNameCharTy->isCharType() && !ResourceNameCharTy->isChar8Type() &&
 +      !ResourceNameCharTy->isWideCharType()) {
 +    Diag(ResourceNamePtr->getBeginLoc(),
-+         diag::err_typecheck_convert_incompatible_pointer)
-+        << 1 << 1 << 1 << 0;
++         diag::err_invalid_builtin_std_embed_argument)
++        << ResourceNamePtrTy
++        << "a pointer to (possibly qualified) 'char', 'wchar_t', or 'char8_t'"
++        << ResourceNamePtr->getSourceRange();
 +    return true;
 +  }
 +
 +  // Check offset is an integer-convertible argument
 +  QualType OffsetTy = Offset->getType();
 +  if (!OffsetTy->isIntegralOrEnumerationType()) {
-+    Expr *OffsetMutable = const_cast<Expr *>(Offset);
-+    ExprResult ImplicitOffsetFixupResult = PerformImplicitConversion(
-+        OffsetMutable, SizeType, AssignmentAction::Passing);
-+    if (!ImplicitOffsetFixupResult.isUsable()) {
-+      Diag(TheCall->getBeginLoc(),
-+           diag::err_typecheck_converted_constant_expression)
-+          << ResourceNameSizeTy << SizeType;
-+      return true;
-+    }
-+    // The implicit conversion worked -- adjust the builtin's argument.
-+    TheCall->setArg(OffsetIndex, ImplicitOffsetFixupResult.get());
++    Diag(TheCall->getBeginLoc(),
++         diag::err_typecheck_converted_constant_expression)
++        << OffsetTy << "a non-negative integer of integral type"
++        << Offset->getSourceRange();
++    return true;
 +  }
 +
 +  if (HasExtraLimitArg) {
 +    // If present, final argument is offset
 +    QualType LimitTy = Limit->getType();
 +    if (!LimitTy->isIntegralOrEnumerationType()) {
-+      Expr *LimitMutable = const_cast<Expr *>(Limit);
-+      ExprResult ImplicitLimitFixupResult = PerformImplicitConversion(
-+          LimitMutable, SizeType, AssignmentAction::Passing);
-+      if (!ImplicitLimitFixupResult.isUsable()) {
-+        Diag(TheCall->getBeginLoc(),
-+             diag::err_typecheck_converted_constant_expression)
-+            << ResourceNameSizeTy << SizeType;
-+        return true;
-+      }
-+      // The implicit conversion worked -- adjust the builtin's argument.
-+      TheCall->setArg(LimitIndex, ImplicitLimitFixupResult.get());
++      Diag(TheCall->getBeginLoc(),
++           diag::err_typecheck_converted_constant_expression)
++          << LimitTy << "a non-negative integer of integral type"
++          << Limit->getSourceRange();
++      return true;
 +    }
 +  }
 +
@@ -2153,12 +2159,31 @@ index 000000000000..5b418623cfc8
 +// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}art.txt
 +// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}empty
 +// CHECK-NEXT: single_byte.txt
+diff --git a/clang/test/Preprocessor/depend-export-dependencies.cpp b/clang/test/Preprocessor/depend-export-dependencies.cpp
+new file mode 100644
+index 000000000000..9359fab5bb00
+--- /dev/null
++++ b/clang/test/Preprocessor/depend-export-dependencies.cpp
+@@ -0,0 +1,13 @@
++// RUN: %clang_cc1 %s -fsyntax-only -verify -std=c++2d -MMD -MT %s.o --embed-dir=%S/Inputs -dependency-file - | FileCheck %s
++
++// "export" has no meaing until p1130 makes headway, but this is parsed
++// and should not affect anything nonetheless
++#depend export <media/*>
++#depend export "single_byte.txt"
++// expected-no-diagnostics
++
++// CHECK: depend.cpp.o
++// CHECK-NEXT: depend.cpp
++// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}art.txt
++// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}empty
++// CHECK-NEXT: single_byte.txt
 diff --git a/clang/test/Preprocessor/depend-recursive-dependencies.cpp b/clang/test/Preprocessor/depend-recursive-dependencies.cpp
 new file mode 100644
-index 000000000000..cd6d1d1a4843
+index 000000000000..297efaa6c50d
 --- /dev/null
 +++ b/clang/test/Preprocessor/depend-recursive-dependencies.cpp
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,12 @@
 +// RUN: %clang_cc1 %s -fsyntax-only -verify -std=c++2d -MMD -MT %s.o --embed-dir=%S/Inputs -dependency-file - | FileCheck %s
 +
 +#depend "media/**"
@@ -2171,24 +2196,23 @@ index 000000000000..cd6d1d1a4843
 +// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}art.txt
 +// CHECK-NEXT: Inputs{{[/\\]}}media{{[/\\]}}empty
 +// CHECK-NEXT: Inputs{{[/\\]}}jk.txt
-+
 diff --git a/clang/test/SemaCXX/Inputs/resources/a/b/empty b/clang/test/SemaCXX/Inputs/resources/a/b/empty
 new file mode 100644
 index 000000000000..e69de29bb2d1
 diff --git a/clang/test/SemaCXX/Inputs/resources/art.bin b/clang/test/SemaCXX/Inputs/resources/art.bin
 new file mode 100644
-index 000000000000..ae92912e2d08
+index 000000000000..c409d0d60a8e
 --- /dev/null
 +++ b/clang/test/SemaCXX/Inputs/resources/art.bin
 @@ -0,0 +1 @@
-+                               +-:-*            @%%%%%                                    *-:+::=+*******########%                                     *:+%*:........-++####%%                                      @+*=......:--=**####%                                        *-:......:.....=###%                                        *::.-*#-.:-###=.:##%                                        *-.#%%*..:.*%##*++*%%                                       #=:=*+.:++::=+**+-=#%                                        +---..+##=..:--===*%@                                       +-:-=*=+*+++--====+#%                                       +:..-=+*+==========##@                                    %=:..:---============*#%@                                  +:....-===============+##%                                #*:.....:-=============+**#%                              *-:.......:=============+***#%                            %=..........-============******%                           #-...........:===========+******#%                         %%=...........:-=========+*******##%                         *:...........:-=========*********%@                        %=-.............:========*********#%                         *:...........:..-=======+*******#%@                        @+:..........:-:.:======+********#%@                         #-.........=#+-..-=====+********%@                          *=.........=#*=-:-=====*##*****#%           @%%@@@###++%%@%#@+:.........+***+--====*####***#%     *#%%%+....*#%#=...*%*..:+:....:...-*****==-=+*#####**#%   %#:.=#%%*....#%%*...=%#:..*-..-###++##******--***##%%***#   %#%+.-%%%:..:#%*....=%#-..+#-..+##%%%%%%##***%***#%%%***%   @%%=:-%%#-=-#%#====*%%*==+%%#++**#@@%%@@@@@@@%****#@%*****%@                                             %#*****##*****%                                              #******#                                                                        R   a   c   c   🦝                             
++                                         @#=+@@                 @@%%@@                              R                  @======%@            @@%%%%%%%@                                                 %=*%%==============*##%%%%%%%@                                                  %=%%%*============*###%%%%%@                              A                     @=%+=========+****##%%%%%%                                                       *==+----===+-----+#%%%%@                                                      @==-----====--%%*---=%%%@                               C                      +=*-#%@@%-===%%@@%%%--%%%@                                                     #*-%%%%%*-===-%@%%%#%#**%@                                                     @+**%%%=--**--+*%@@@@#**%%                              C                       *+=+-=--@%%%#-=****++***%@                                                     @***+==--===---#+*******%%@                                                    @*==**%%%#%%%%**+*******%%@                                                    @+===+**%%#**************%%@                                                  %========*****************%%%@                                               @======*********************#%%@                                              *========********************##%%@                                            +=========*******************###%%@                                         @===========+******************#####%@                                       #=============+****************#######%@                                     @+==============****************########%%                                    %================+**************##########%@                                  @@=================*************###########%%@                                  @=================*************###########%%@                                  +==================************############%@                                @@@===================+**********############%%                                  *================+===**********###########%@@                                 @+================*+==+*********##########%%@@                                  @==============%%*+===********###########%%@                                   @+=============%%**+==+*******#%#%#######%@                                     %=============%%%#**==*******#%%%#######@                      @@@  @ @@@      @=============*#%###*+*******#%%%%%#####@           @@@#-----##%%%%-----%%%%----++============#######******##%%%%%%####@        @-%%%%%%-----*%%%%%----*%%%-===#*======+#====@########*=+*###%%%%@@###@      @%=--=%%%%%-----%%%%%+----%%%#===*%====%%%%%%%#@@#########=####%@@@ @###@     @%%%%--%%%%%-----%%%%------%%%%==--%%====#%%@@@@@@@%@%#####@%####@@@@#####@    @@%%#---%%%*====@@@*+*####@@@%=--=%%%%+=+###@@@%%@@@@@@@@@@@######@@@######@                                        @@@@@@                 @#######@@########@                                                            @#########@@#@@##@                                                              @########@   🦝
 \ No newline at end of file
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp
 new file mode 100644
-index 000000000000..ab8066220d6d
+index 000000000000..bd7c8610ba0f
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,198 @@
 +// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++2d-extensions -Wno-c++23-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
@@ -2198,67 +2222,69 @@ index 000000000000..ab8066220d6d
 +#depend "resources/*"
 +
 +namespace std {
-+	enum class byte : unsigned char {};
++  enum class byte : unsigned char {};
++  typedef decltype(sizeof(0)) size_t;
 +}
 +
-+// We put this data here encoded with `\x...` to make it resistant to encoding
-+// changes and future `-fexec...` changes and differences in input encoding
-+// reading, even though Clang is MOSTLY stable with ASCII-as-a-subset-of-UTF-8
-+// being the input file character set before it hits the actual internal
-+// UTF-8-ish encoding (though it's being used increasingly in EBCDIC
-+// environments). It's primarily binary data. We do this mostly because we are
-+// testing our binary data loading thing, and so don't want to rely on
-+// std::embed / __builtin_std_embed / #embed to load this data into place.
-+// 60 x 33
++// 79 x 40
 +constexpr const unsigned char v_correct[] = 
 +// clang-format off
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2B\x2D\x3A\x2D\x2A\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x40\x25\x25\x25\x25\x25\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x2D\x3A\x2B\x3A\x3A\x3D\x2B\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x23\x23\x23\x23\x23\x23\x23\x23\x25\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x3A\x2B\x25\x2A\x3A\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2D\x2B\x2B\x23\x23\x23\x23\x25\x25\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x40\x2B\x2A\x3D\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x2D\x2D\x3D\x2A\x2A\x23\x23\x23\x23\x25\x20\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x2D\x3A\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x2E\x2E\x2E\x2E\x2E\x3D\x23\x23\x23\x25\x20\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x3A\x3A\x2E\x2D\x2A\x23\x2D\x2E\x3A\x2D\x23\x23\x23\x3D\x2E\x3A\x23\x23\x25\x20\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x2D\x2E\x23\x25\x25\x2A\x2E\x2E\x3A\x2E\x2A\x25\x23\x23\x2A\x2B\x2B\x2A\x25\x25\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x23\x3D\x3A\x3D\x2A\x2B\x2E\x3A\x2B\x2B\x3A\x3A\x3D\x2B\x2A\x2A\x2B\x2D\x3D\x23\x25\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2B\x2D\x2D\x2D\x2E\x2E\x2B\x23\x23\x3D\x2E\x2E\x3A\x2D\x2D\x3D\x3D\x3D\x2A\x25\x40\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2B\x2D\x3A\x2D\x3D\x2A\x3D\x2B\x2A\x2B\x2B\x2B\x2D\x2D\x3D\x3D\x3D\x3D\x2B\x23\x25\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2B\x3A\x2E\x2E\x2D\x3D\x2B\x2A\x2B\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x23\x23\x40\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x25\x3D\x3A\x2E\x2E\x3A\x2D\x2D\x2D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2A\x23\x25\x40\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2B\x3A\x2E\x2E\x2E\x2E\x2D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2B\x23\x23\x25\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x23\x2A\x3A\x2E\x2E\x2E\x2E\x2E\x3A\x2D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2B\x2A\x2A\x23\x25\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x2D\x3A\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2B\x2A\x2A\x2A\x23\x25\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x25\x3D\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2A\x2A\x2A\x2A\x2A\x2A\x25\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x23\x2D\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2B\x2A\x2A\x2A\x2A\x2A\x2A\x23\x25\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x25\x25\x3D\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x2D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2B\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x23\x23\x25\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x3A\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x2D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x25\x40\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x25\x3D\x2D\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x23\x25\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x3A\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x2E\x2E\x2D\x3D\x3D\x3D\x3D\x3D\x3D\x3D\x2B\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x23\x25\x40\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x40\x2B\x3A\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3A\x2D\x3A\x2E\x3A\x3D\x3D\x3D\x3D\x3D\x3D\x2B\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x23\x25\x40\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x23\x2D\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3D\x23\x2B\x2D\x2E\x2E\x2D\x3D\x3D\x3D\x3D\x3D\x2B\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x25\x40\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x2A\x3D\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x3D\x23\x2A\x3D\x2D\x3A\x2D\x3D\x3D\x3D\x3D\x3D\x2A\x23\x23\x2A\x2A\x2A\x2A\x2A\x23\x25\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x40\x25\x25\x40\x40\x40\x23\x23\x23\x2B\x2B\x25\x25\x40\x25\x23\x40\x2B\x3A\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2E\x2B\x2A\x2A\x2A\x2B\x2D\x2D\x3D\x3D\x3D\x3D\x2A\x23\x23\x23\x23\x2A\x2A\x2A\x23\x25\x20\x20\x20"
-+"\x20\x20\x2A\x23\x25\x25\x25\x2B\x2E\x2E\x2E\x2E\x2A\x23\x25\x23\x3D\x2E\x2E\x2E\x2A\x25\x2A\x2E\x2E\x3A\x2B\x3A\x2E\x2E\x2E\x2E\x3A\x2E\x2E\x2E\x2D\x2A\x2A\x2A\x2A\x2A\x3D\x3D\x2D\x3D\x2B\x2A\x23\x23\x23\x23\x23\x2A\x2A\x23\x25\x20\x20\x20"
-+"\x25\x23\x3A\x2E\x3D\x23\x25\x25\x2A\x2E\x2E\x2E\x2E\x23\x25\x25\x2A\x2E\x2E\x2E\x3D\x25\x23\x3A\x2E\x2E\x2A\x2D\x2E\x2E\x2D\x23\x23\x23\x2B\x2B\x23\x23\x2A\x2A\x2A\x2A\x2A\x2A\x2D\x2D\x2A\x2A\x2A\x23\x23\x25\x25\x2A\x2A\x2A\x23\x20\x20\x20"
-+"\x25\x23\x25\x2B\x2E\x2D\x25\x25\x25\x3A\x2E\x2E\x3A\x23\x25\x2A\x2E\x2E\x2E\x2E\x3D\x25\x23\x2D\x2E\x2E\x2B\x23\x2D\x2E\x2E\x2B\x23\x23\x25\x25\x25\x25\x25\x25\x23\x23\x2A\x2A\x2A\x25\x2A\x2A\x2A\x23\x25\x25\x25\x2A\x2A\x2A\x25\x20\x20\x20"
-+"\x40\x25\x25\x3D\x3A\x2D\x25\x25\x23\x2D\x3D\x2D\x23\x25\x23\x3D\x3D\x3D\x3D\x2A\x25\x25\x2A\x3D\x3D\x2B\x25\x25\x23\x2B\x2B\x2A\x2A\x23\x40\x40\x25\x25\x40\x40\x40\x40\x40\x40\x40\x25\x2A\x2A\x2A\x2A\x23\x40\x25\x2A\x2A\x2A\x2A\x2A\x25\x40"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x25\x23\x2A\x2A\x2A\x2A\x2A\x23\x23\x2A\x2A\x2A\x2A\x2A\x25"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x23\x2A\x2A\x2A\x2A\x2A\x2A\x23\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20"
-+"\x20\x20\x20\x20\x20\x20\x52\x20\x20\x20\x61\x20\x20\x20\x63\x20\x20\x20\x63\x20\x20\x20\xF0\x9F\xA6\x9D\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20";
++u8"                                         @#=+@@                 @@%%@@         "
++u8"                     R                  @======%@            @@%%%%%%%@        "
++u8"                                         %=*%%==============*##%%%%%%%@        "
++u8"                                          %=%%%*============*###%%%%%@         "
++u8"                     A                     @=%+=========+****##%%%%%%          "
++u8"                                             *==+----===+-----+#%%%%@          "
++u8"                                            @==-----====--%%*---=%%%@          "
++u8"                     C                      +=*-#%@@%-===%%@@%%%--%%%@         "
++u8"                                            #*-%%%%%*-===-%@%%%#%#**%@         "
++u8"                                            @+**%%%=--**--+*%@@@@#**%%         "
++u8"                     C                       *+=+-=--@%%%#-=****++***%@        "
++u8"                                             @***+==--===---#+*******%%@       "
++u8"                                             @*==**%%%#%%%%**+*******%%@       "
++u8"                                             @+===+**%%#**************%%@      "
++u8"                                            %========*****************%%%@     "
++u8"                                          @======*********************#%%@     "
++u8"                                         *========********************##%%@    "
++u8"                                        +=========*******************###%%@    "
++u8"                                     @===========+******************#####%@    "
++u8"                                   #=============+****************#######%@    "
++u8"                                 @+==============****************########%%    "
++u8"                                %================+**************##########%@   "
++u8"                               @@=================*************###########%%@  "
++u8"                                @=================*************###########%%@  "
++u8"                                +==================************############%@  "
++u8"                              @@@===================+**********############%%  "
++u8"                                *================+===**********###########%@@  "
++u8"                               @+================*+==+*********##########%%@@  "
++u8"                                @==============%%*+===********###########%%@   "
++u8"                                @+=============%%**+==+*******#%#%#######%@    "
++u8"                                 %=============%%%#**==*******#%%%#######@     "
++u8"                 @@@  @ @@@      @=============*#%###*+*******#%%%%%#####@     "
++u8"      @@@#-----##%%%%-----%%%%----++============#######******##%%%%%%####@     "
++u8"   @-%%%%%%-----*%%%%%----*%%%-===#*======+#====@########*=+*###%%%%@@###@     "
++u8" @%=--=%%%%%-----%%%%%+----%%%#===*%====%%%%%%%#@@#########=####%@@@ @###@     "
++u8"@%%%%--%%%%%-----%%%%------%%%%==--%%====#%%@@@@@@@%@%#####@%####@@@@#####@    "
++u8"@@%%#---%%%*====@@@*+*####@@@%=--=%%%%+=+###@@@%%@@@@@@@@@@@######@@@######@   "
++u8"                                     @@@@@@                 @#######@@########@"
++u8"                                                            @#########@@#@@##@ "
++u8"                                                             @########@   \xF0\x9F\xA6\x9D";
 +// clang-format on
-+constexpr const decltype(sizeof(0)) v_correct_size = sizeof(v_correct) - 1;
++constexpr const std::size_t v_correct_size = sizeof(v_correct) - 1;
++constexpr const unsigned char* v_correct_end = v_correct + v_correct_size;
 +
 +template <typename I0, typename S0, typename I1, typename S1>
 +constexpr bool byte_equal (I0 first0, S0 last0, I1 first1, S1 last1) {
-+	for (;first0 != last0 || first1 != last1; ++first0, ++last1) {
-+		if ((unsigned char)*first0 != (unsigned char)*first1) {
-+			return false;
-+		}
-+	}
-+	return first0 == last0 && first1 == last1;
++  for (;first0 != last0 || first1 != last1; ++first0, ++first1) {
++    if ((unsigned char)*first0 != (unsigned char)*first1) {
++      return false;
++    }
++  }
++  return first0 == last0 && first1 == last1;
 +}
 +
-+inline constexpr decltype(sizeof(0)) sentinel_size = 44203zu;
++inline constexpr std::size_t size_max = (std::size_t)0xFFFFFFFFFFFFFFFFull;
++inline constexpr std::size_t sentinel_size = 44203zu;
 +template <typename T>
 +inline constexpr T sentinel_object = {};
 +template <typename T>
@@ -2266,107 +2292,197 @@ index 000000000000..ab8066220d6d
 +
 +template <typename T>
 +struct inspect {
-+	const T* ptr = sentinel_address<T>>
-+	decltype(sizeof(0)) size = sentinel_size;
-+	int status = -1;
++  const T* ptr = sentinel_address<T>;
++  std::size_t size = sentinel_size;
++  int status = -1;
 +};
 +
 +enum : int {
-+	not_found,
-+	found,
-+	no_depend,
-+	found
++  not_found,
++  found,
++  no_depend,
++  found_empty
 +};
 +
-+template <typename T, typename C, decltype(sizeof(0)) N>
-+consteval inspect<T> non_local_lookup_core (const C (&name)[N]) {
-+	inspect<T> result;
-+	result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, name, 0);
-+	return result;
++template <typename T, typename C, std::size_t N>
++consteval inspect<T> non_local_lookup_core (const C (&name)[N],
++                                            std::size_t offset = 0,
++                                            std::size_t limit = size_max) {
++  inspect<T> result;
++  if (limit == size_max)
++    result.ptr = __builtin_std_embed(0b000, result.status, result.size,
++                                     result.ptr, N-1, name, offset);
++  else
++    result.ptr = __builtin_std_embed(0b000, result.status, result.size,
++                                     result.ptr, N-1, name, offset, limit);
++  return result;
 +}
 +
 +consteval bool art () {
-+	constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/art.bin");
-+	static_assert(v0.status == found);
-+	static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v0.size == v_correct_size);
-+	constexpr auto v1 = non_local_lookup_core<unsigned char>(L"resources/art.bin");
-+	static_assert(v1.status == found);
-+	static_assert(byte_equal(v1.ptr, v1.ptr + v1.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v1.size == v_correct_size);
-+	constexpr auto v2 = non_local_lookup_core<unsigned char>(u8"resources/art.bin");
-+	static_assert(v2.status == found);
-+	static_assert(byte_equal(v2.ptr, v2.ptr + v2.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v2.size == v_correct_size);
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/art.bin");
++  static_assert(v0.status == found);
++  static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, &v_correct[0], v_correct_end));
++  static_assert(v0.size == v_correct_size);
++  constexpr auto v1 = non_local_lookup_core<unsigned char>(L"resources/art.bin");
++  static_assert(v1.status == found);
++  static_assert(byte_equal(v1.ptr, v1.ptr + v1.size, &v_correct[0], v_correct_end));
++  static_assert(v1.size == v_correct_size);
++  constexpr auto v2 = non_local_lookup_core<unsigned char>(u8"resources/art.bin");
++  static_assert(v2.status == found);
++  static_assert(byte_equal(v2.ptr, v2.ptr + v2.size, &v_correct[0], v_correct_end));
++  static_assert(v2.size == v_correct_size);
 +
-+	constexpr auto v3 = non_local_lookup_core<char>("resources/art.bin");
-+	static_assert(v3.status == found);
-+	static_assert(byte_equal(v3.ptr, v3.ptr + v3.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v3.size == v_correct_size);
-+	constexpr auto v4 = non_local_lookup_core<char>(L"resources/art.bin");
-+	static_assert(v4.status == found);
-+	static_assert(byte_equal(v4.ptr, v4.ptr + v4.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v4.size == v_correct_size);
-+	constexpr auto v5 = non_local_lookup_core<char>(u8"resources/art.bin");
-+	static_assert(v5.status == found);
-+	static_assert(byte_equal(v5.ptr, v5.ptr + v5.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v5.size == v_correct_size);
++  constexpr auto v3 = non_local_lookup_core<char>("resources/art.bin");
++  static_assert(v3.status == found);
++  static_assert(byte_equal(v3.ptr, v3.ptr + v3.size, &v_correct[0], v_correct_end));
++  static_assert(v3.size == v_correct_size);
++  constexpr auto v4 = non_local_lookup_core<char>(L"resources/art.bin");
++  static_assert(v4.status == found);
++  static_assert(byte_equal(v4.ptr, v4.ptr + v4.size, &v_correct[0], v_correct_end));
++  static_assert(v4.size == v_correct_size);
++  constexpr auto v5 = non_local_lookup_core<char>(u8"resources/art.bin");
++  static_assert(v5.status == found);
++  static_assert(byte_equal(v5.ptr, v5.ptr + v5.size, &v_correct[0], v_correct_end));
++  static_assert(v5.size == v_correct_size);
 +
-+	constexpr auto v6 = non_local_lookup_core<std::byte>("resources/art.bin");
-+	static_assert(v6.status == found);
-+	static_assert(byte_equal(v6.ptr, v6.ptr + v6.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v6.size == v_correct_size);
-+	constexpr auto v7 = non_local_lookup_core<std::byte>(L"resources/art.bin");
-+	static_assert(v7.status == found);
-+	static_assert(byte_equal(v7.ptr, v7.ptr + v7.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v7.size == v_correct_size);
-+	constexpr auto v8 = non_local_lookup_core<std::byte>(u8"resources/art.bin");
-+	static_assert(v8.status == found);
-+	static_assert(byte_equal(v8.ptr, v8.ptr + v8.size, &v_correct[0], &v_correct[0] + v_correct_size));
-+	static_assert(v8.size == v_correct_size);
++  constexpr auto v6 = non_local_lookup_core<std::byte>("resources/art.bin");
++  static_assert(v6.status == found);
++  static_assert(byte_equal(v6.ptr, v6.ptr + v6.size, &v_correct[0], v_correct_end));
++  static_assert(v6.size == v_correct_size);
++  constexpr auto v7 = non_local_lookup_core<std::byte>(L"resources/art.bin");
++  static_assert(v7.status == found);
++  static_assert(byte_equal(v7.ptr, v7.ptr + v7.size, &v_correct[0], v_correct_end));
++  static_assert(v7.size == v_correct_size);
++  constexpr auto v8 = non_local_lookup_core<std::byte>(u8"resources/art.bin");
++  static_assert(v8.status == found);
++  static_assert(byte_equal(v8.ptr, v8.ptr + v8.size, &v_correct[0], v_correct_end));
++  static_assert(v8.size == v_correct_size);
 +
-+	return true;
++  return true;
 +}
 +
-+consteval cannot_depend_on () {
-+	// test that #depend "resources/*" pattern deos not allow something
-+	// that is more "deeply" nested
-+	constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/a/b/empty");
-+	static_assert(v0.status == no_depend);
-+	static_assert(v0.ptr == nullptr);
-+	static_assert(v0.size == sentinel_size);
-+	
-+	return true;
++consteval bool cannot_depend_on () {
++  // test that #depend "resources/*" pattern deos not allow something
++  // that is more "deeply" nested
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/a/b/empty");
++  static_assert(v0.status == no_depend);
++  static_assert(v0.ptr == nullptr);
++  static_assert(v0.size == sentinel_size);
++  
++  return true;
++}
++
++consteval bool offset () {
++  constexpr std::size_t R_offset = 100;
++  constexpr std::size_t A_offset = 237;
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/art.bin", R_offset);
++  static_assert(v0.status == found);
++  static_assert(v0.ptr[0] == (unsigned char)'R');
++  static_assert(v0.ptr[A_offset] == (unsigned char)'A');
++  static_assert(v0.size == v_correct_size - R_offset);
++
++  constexpr auto v1 = non_local_lookup_core<unsigned char>("resources/art.bin", size_max);
++  static_assert(v1.status == found_empty);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == 0);
++
++  return true;
++}
++
++consteval bool limit () {
++  constexpr std::size_t line_offset = 553;
++  constexpr std::size_t line_limit = 79;
++  constexpr std::size_t C_offset = 21;
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/art.bin", line_offset, line_limit);
++  static_assert(v0.status == found);
++  static_assert(v0.ptr[C_offset] == (unsigned char)'C');
++  static_assert(v0.size == line_limit);
++  static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, v_correct + line_offset, v_correct + line_offset + line_limit));
++
++  constexpr auto v1 = non_local_lookup_core<unsigned char>("resources/art.bin", 0, 0);
++  static_assert(v1.status == found_empty);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == 0);
++
++  return true;
 +}
 +
 +static_assert(art());
 +static_assert(cannot_depend_on());
++static_assert(offset());
++static_assert(limit());
+diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed-errors.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed-errors.cpp
+new file mode 100644
+index 000000000000..0a44c1b81e09
+--- /dev/null
++++ b/clang/test/SemaCXX/consteval-builtin-std-embed-errors.cpp
+@@ -0,0 +1,40 @@
++// RUN: %clang_cc1 -std=c++2d -fsyntax-only  -embed-dir=%S/Inputs %s
++
++namespace std {
++  enum byte : unsigned char {};
++  typedef decltype(sizeof(0)) size_t;
++}
++
++consteval void f () {
++
++  unsigned int locus = 0;
++  int status = 0;
++  std::size_t size = 0;
++  const char* ptrc = 0;
++  std::size_t offset = 0;
++  std::size_t limit = 0;
++  struct illegal_t { unsigned char c; } illegal = {};
++
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, offset, limit, illegal);
++  // error@-1 {{ too many arguments to function call, expected at most 8, have 9 }}
++  (void)__builtin_std_embed(locus, status, size);
++  // error@-1 {{ too few arguments to function call, expected 7, have 3 }}
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc);
++  // error@-1 {{ too few arguments to function call, expected 7, have 6 }}
++  (void)__builtin_std_embed(illegal, status, size, ptrc, 0, ptrc, offset, limit);
++  // error@-1 {{ no viable conversion from 'struct illegal_t' to 'unsigned int' }}
++  (void)__builtin_std_embed(locus, illegal, size, ptrc, 0, ptrc, offset, limit);
++  // error@-1 {{ non-const lvalue reference to type 'int' cannot bind to a value of unrelated type 'struct illegal_t' }}
++  (void)__builtin_std_embed(locus, status, illegal, ptrc, 0, ptrc, offset, limit);
++  // error@-1 {{ non-const lvalue reference to type '__size_t' (aka 'unsigned long') cannot bind to a value of unrelated type 'struct illegal_t' }}
++  (void)__builtin_std_embed(locus, status, size, illegal, 0, ptrc, offset, limit);
++  // error@-1 {{ invalid argument to '__builtin_std_embed': 'struct illegal_t' should be a pointer to const 'char', 'unsigned char', or 'std::byte' }}
++  (void)__builtin_std_embed(locus, status, size, ptrc, illegal, ptrc, offset, limit);
++  // error@-1 {{ invalid argument to '__builtin_std_embed': 'struct illegal_t' should be an integral type with a non-negative value }}
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, illegal, offset, limit);
++  // error@-1 {{ invalid argument to '__builtin_std_embed': 'struct illegal_t' should be a pointer to (possibly qualified) 'char', 'wchar_t', or 'char8_t' }}
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, illegal, limit);
++  // error@-1 {{ value of type 'struct illegal_t' is not implicitly convertible to a non-negative integer of integral type }}
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, offset, illegal);
++  // error@-1 {{ value of type 'struct illegal_t' is not implicitly convertible to a non-negative integer of integral type }}
++}
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp
 new file mode 100644
-index 000000000000..d98f7c3c5739
+index 000000000000..dc9cfa3932c4
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp
 @@ -0,0 +1,73 @@
-+// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++2d-extensions -Wno-c++23-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
-+// RUN: %clang_cc1 -std=c++2d -fsyntax-only --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++2d-extensions -Wno-c++23-extensions -Wnoc23-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++2d-extensions -Wnoc23-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++2d-extensions -Wnoc23-extensions --embed-dir=%S/Inputs %s
++// RUN: %clang_cc1 -std=c++2d -fsyntax-only -Wnoc23-extensions --embed-dir=%S/Inputs %s
 +// expected-no-diagnostics
 +
 +#depend __FILE__
 +
 +namespace std {
-+	enum class byte : unsigned char {};
++  enum class byte : unsigned char {};
 +}
 +
 +template <typename I0, typename S0, typename I1, typename S1>
 +constexpr bool byte_equal (I0 first0, S0 last0, I1 first1, S1 last1) {
-+	for (;first0 != last0 || first1 != last1; ++first0, ++last1) {
-+		if ((unsigned char)*first0 != (unsigned char)*first1) {
-+			return false;
-+		}
-+	}
-+	return first0 == last0 && first1 == last1;
++  for (;first0 != last0 || first1 != last1; ++first0, ++first1) {
++    if ((unsigned char)*first0 != (unsigned char)*first1) {
++      return false;
++    }
++  }
++  return first0 == last0 && first1 == last1;
 +}
 +
 +inline constexpr decltype(sizeof(0)) sentinel_size = 44203;
@@ -2377,55 +2493,55 @@ index 000000000000..d98f7c3c5739
 +
 +template <typename T>
 +struct inspect {
-+	const T* ptr = sentinel_address<T>;
-+	decltype(sizeof(0)) size = sentinel_size;
-+	int status = -1;
++  const T* ptr = sentinel_address<T>;
++  decltype(sizeof(0)) size = sentinel_size;
++  int status = -1;
 +};
 +
 +enum : int {
-+	not_found,
-+	found,
-+	no_depend,
-+	found_empty,
++  not_found,
++  found,
++  no_depend,
++  found_empty,
 +};
 +
 +template <typename T, typename C, decltype(sizeof(0)) N>
 +consteval inspect<T> local_lookup_core (const C (&name)[N]) {
-+	inspect<T> result;
-+	result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, name, 0);
-+	return result;
++  inspect<T> result;
++  result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, name, 0);
++  return result;
 +}
 +
 +consteval bool local_file () {
-+	static constexpr const unsigned char file[] = {
++  static constexpr const unsigned char file[] = {
 +#embed __FILE__
-+	};
-+	static constexpr const decltype(sizeof(0)) file_size = sizeof(file);
-+	constexpr auto v0 = local_lookup_core<unsigned char>(__FILE__);
-+	static_assert(v0.status == found);
-+	static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, &file[0], &file[0] + file_size));
-+	static_assert(v0.size == file_size);
++  };
++  static constexpr const decltype(sizeof(0)) file_size = sizeof(file);
++  constexpr auto v0 = local_lookup_core<unsigned char>(__FILE__);
++  static_assert(v0.status == found);
++  static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, &file[0], &file[0] + file_size));
++  static_assert(v0.size == file_size);
 +
-+	constexpr auto v1 = local_lookup_core<char>(__FILE__);
-+	static_assert(v1.status == found);
-+	static_assert(byte_equal(v1.ptr, v1.ptr + v1.size, &file[0], &file[0] + file_size));
-+	static_assert(v1.size == file_size);
++  constexpr auto v1 = local_lookup_core<char>(__FILE__);
++  static_assert(v1.status == found);
++  static_assert(byte_equal(v1.ptr, v1.ptr + v1.size, &file[0], &file[0] + file_size));
++  static_assert(v1.size == file_size);
 +
-+	constexpr auto v2 = local_lookup_core<std::byte>(__FILE__);
-+	static_assert(v2.status == found);
-+	static_assert(byte_equal(v2.ptr, v2.ptr + v2.size, &file[0], &file[0] + file_size));
-+	static_assert(v2.size == file_size);
++  constexpr auto v2 = local_lookup_core<std::byte>(__FILE__);
++  static_assert(v2.status == found);
++  static_assert(byte_equal(v2.ptr, v2.ptr + v2.size, &file[0], &file[0] + file_size));
++  static_assert(v2.size == file_size);
 +
-+	return true;
++  return true;
 +}
 +
 +static_assert(local_file());
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed.cpp
 new file mode 100644
-index 000000000000..6d1001ac5a10
+index 000000000000..2c6a836ec324
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed.cpp
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,186 @@
 +// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++2d-extensions -Wno-c++23-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
@@ -2433,8 +2549,9 @@ index 000000000000..6d1001ac5a10
 +// expected-no-diagnostics
 +
 +#depend "resources/**"
++
 +namespace std {
-+	enum class byte : unsigned char {};
++  enum class byte : unsigned char {};
 +}
 +
 +inline constexpr decltype(sizeof(0)) sentinel_size = 44203zu;
@@ -2445,167 +2562,167 @@ index 000000000000..6d1001ac5a10
 +
 +template <typename T>
 +struct inspect {
-+	const T* ptr = sentinel_address<T>;
-+	decltype(sizeof(0)) size = sentinel_size;
-+	int status = -1;
++  const T* ptr = sentinel_address<T>;
++  decltype(sizeof(0)) size = sentinel_size;
++  int status = -1;
 +};
 +
 +enum : int {
-+	not_found,
-+	found,
-+	no_depend,
-+	found_empty
++  not_found,
++  found,
++  no_depend,
++  found_empty
 +};
 +
 +template <typename T, typename C>
 +consteval inspect<T> does_not_exist_core () {
-+	static constexpr const C name[1] = { C(0) };
-+	inspect<T> result = {};
-+	result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (sizeof(name) / sizeof(*name))-1, &name[0], 0);
-+	return result;
++  static constexpr const C name[1] = { C(0) };
++  inspect<T> result = {};
++  result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (sizeof(name) / sizeof(*name))-1, &name[0], 0);
++  return result;
 +}
 +
 +template <typename T, typename C, decltype(sizeof(0)) N>
 +consteval inspect<T> non_local_lookup_core (const C (&name)[N]) {
-+	inspect<T> result = {};
-+	result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, &name[0], 0);
-+	return result;
++  inspect<T> result = {};
++  result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, &name[0], 0);
++  return result;
 +}
 +
 +template <typename T, typename C, decltype(sizeof(0)) N>
 +consteval inspect<T> local_lookup_core (const C (&name)[N]) {
-+	inspect<T> result = {};
-+	result.ptr = __builtin_std_embed(0b001, result.status, result.size, result.ptr, (N)-1, &name[0], 0);
-+	return result;
++  inspect<T> result = {};
++  result.ptr = __builtin_std_embed(0b001, result.status, result.size, result.ptr, (N)-1, &name[0], 0);
++  return result;
 +}
 +
 +consteval bool does_not_exist () {
-+	constexpr auto v0 = does_not_exist_core<unsigned char, char>();
-+	static_assert(v0.status == not_found);
-+	static_assert(v0.ptr == nullptr);
-+	static_assert(v0.size == sentinel_size);
-+	constexpr auto v1 = does_not_exist_core<char, char>();
-+	static_assert(v1.status == not_found);
-+	static_assert(v1.ptr == nullptr);
-+	static_assert(v1.size == sentinel_size);
-+	constexpr auto v2 = does_not_exist_core<std::byte, char>();
-+	static_assert(v2.status == not_found);
-+	static_assert(v2.ptr == nullptr);
-+	static_assert(v2.size == sentinel_size);
++  constexpr auto v0 = does_not_exist_core<unsigned char, char>();
++  static_assert(v0.status == not_found);
++  static_assert(v0.ptr == nullptr);
++  static_assert(v0.size == sentinel_size);
++  constexpr auto v1 = does_not_exist_core<char, char>();
++  static_assert(v1.status == not_found);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == sentinel_size);
++  constexpr auto v2 = does_not_exist_core<std::byte, char>();
++  static_assert(v2.status == not_found);
++  static_assert(v2.ptr == nullptr);
++  static_assert(v2.size == sentinel_size);
 +
-+	constexpr auto v3 = does_not_exist_core<unsigned char, wchar_t>();
-+	static_assert(v3.status == not_found);
-+	static_assert(v3.ptr == nullptr);
-+	static_assert(v3.size == sentinel_size);
-+	constexpr auto v4 = does_not_exist_core<char, wchar_t>();
-+	static_assert(v4.status == not_found);
-+	static_assert(v4.ptr == nullptr);
-+	static_assert(v4.size == sentinel_size);
-+	constexpr auto v5 = does_not_exist_core<std::byte, wchar_t>();
-+	static_assert(v5.status == not_found);
-+	static_assert(v5.ptr == nullptr);
-+	static_assert(v5.size == sentinel_size);
++  constexpr auto v3 = does_not_exist_core<unsigned char, wchar_t>();
++  static_assert(v3.status == not_found);
++  static_assert(v3.ptr == nullptr);
++  static_assert(v3.size == sentinel_size);
++  constexpr auto v4 = does_not_exist_core<char, wchar_t>();
++  static_assert(v4.status == not_found);
++  static_assert(v4.ptr == nullptr);
++  static_assert(v4.size == sentinel_size);
++  constexpr auto v5 = does_not_exist_core<std::byte, wchar_t>();
++  static_assert(v5.status == not_found);
++  static_assert(v5.ptr == nullptr);
++  static_assert(v5.size == sentinel_size);
 +
-+	constexpr auto v6 = does_not_exist_core<unsigned char, char8_t>();
-+	static_assert(v6.status == not_found);
-+	static_assert(v6.ptr == nullptr);
-+	static_assert(v6.size == sentinel_size);
-+	constexpr auto v7 = does_not_exist_core<char, char8_t>();
-+	static_assert(v7.status == not_found);
-+	static_assert(v7.ptr == nullptr);
-+	static_assert(v7.size == sentinel_size);
-+	constexpr auto v8 = does_not_exist_core<std::byte, char8_t>();
-+	static_assert(v8.status == not_found);
-+	static_assert(v8.ptr == nullptr);
-+	static_assert(v8.size == sentinel_size);
-+	
-+	return true;
++  constexpr auto v6 = does_not_exist_core<unsigned char, char8_t>();
++  static_assert(v6.status == not_found);
++  static_assert(v6.ptr == nullptr);
++  static_assert(v6.size == sentinel_size);
++  constexpr auto v7 = does_not_exist_core<char, char8_t>();
++  static_assert(v7.status == not_found);
++  static_assert(v7.ptr == nullptr);
++  static_assert(v7.size == sentinel_size);
++  constexpr auto v8 = does_not_exist_core<std::byte, char8_t>();
++  static_assert(v8.status == not_found);
++  static_assert(v8.ptr == nullptr);
++  static_assert(v8.size == sentinel_size);
++  
++  return true;
 +}
 +
 +consteval bool not_depended_on () {
-+	constexpr auto v0 = local_lookup_core<unsigned char>("consteval-builtin-std-embed.cpp");
-+	static_assert(v0.status == no_depend);
-+	static_assert(v0.ptr == nullptr);
-+	static_assert(v0.size == sentinel_size);
-+	constexpr auto v1 = local_lookup_core<unsigned char>(L"consteval-builtin-std-embed.cpp");
-+	static_assert(v1.status == no_depend);
-+	static_assert(v1.ptr == nullptr);
-+	static_assert(v1.size == sentinel_size);
-+	constexpr auto v2 = local_lookup_core<unsigned char>(u8"consteval-builtin-std-embed.cpp");
-+	static_assert(v2.status == no_depend);
-+	static_assert(v2.ptr == nullptr);
-+	static_assert(v2.size == sentinel_size);
++  constexpr auto v0 = local_lookup_core<unsigned char>("consteval-builtin-std-embed.cpp");
++  static_assert(v0.status == no_depend);
++  static_assert(v0.ptr == nullptr);
++  static_assert(v0.size == sentinel_size);
++  constexpr auto v1 = local_lookup_core<unsigned char>(L"consteval-builtin-std-embed.cpp");
++  static_assert(v1.status == no_depend);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == sentinel_size);
++  constexpr auto v2 = local_lookup_core<unsigned char>(u8"consteval-builtin-std-embed.cpp");
++  static_assert(v2.status == no_depend);
++  static_assert(v2.ptr == nullptr);
++  static_assert(v2.size == sentinel_size);
 +
-+	constexpr auto v3 = local_lookup_core<char>("consteval-builtin-std-embed.cpp");
-+	static_assert(v3.status == no_depend);
-+	static_assert(v3.ptr == nullptr);
-+	static_assert(v3.size == sentinel_size);
-+	constexpr auto v4 = local_lookup_core<char>(L"consteval-builtin-std-embed.cpp");
-+	static_assert(v4.status == no_depend);
-+	static_assert(v4.ptr == nullptr);
-+	static_assert(v4.size == sentinel_size);
-+	constexpr auto v5 = local_lookup_core<char>(u8"consteval-builtin-std-embed.cpp");
-+	static_assert(v5.status == no_depend);
-+	static_assert(v5.ptr == nullptr);
-+	static_assert(v5.size == sentinel_size);
++  constexpr auto v3 = local_lookup_core<char>("consteval-builtin-std-embed.cpp");
++  static_assert(v3.status == no_depend);
++  static_assert(v3.ptr == nullptr);
++  static_assert(v3.size == sentinel_size);
++  constexpr auto v4 = local_lookup_core<char>(L"consteval-builtin-std-embed.cpp");
++  static_assert(v4.status == no_depend);
++  static_assert(v4.ptr == nullptr);
++  static_assert(v4.size == sentinel_size);
++  constexpr auto v5 = local_lookup_core<char>(u8"consteval-builtin-std-embed.cpp");
++  static_assert(v5.status == no_depend);
++  static_assert(v5.ptr == nullptr);
++  static_assert(v5.size == sentinel_size);
 +
-+	constexpr auto v6 = local_lookup_core<std::byte>("consteval-builtin-std-embed.cpp");
-+	static_assert(v6.status == no_depend);
-+	static_assert(v6.ptr == nullptr);
-+	static_assert(v6.size == sentinel_size);
-+	constexpr auto v7 = local_lookup_core<std::byte>(L"consteval-builtin-std-embed.cpp");
-+	static_assert(v7.status == no_depend);
-+	static_assert(v7.ptr == nullptr);
-+	static_assert(v7.size == sentinel_size);
-+	constexpr auto v8 = local_lookup_core<std::byte>(u8"consteval-builtin-std-embed.cpp");
-+	static_assert(v8.status == no_depend);
-+	static_assert(v8.ptr == nullptr);
-+	static_assert(v8.size == sentinel_size);
++  constexpr auto v6 = local_lookup_core<std::byte>("consteval-builtin-std-embed.cpp");
++  static_assert(v6.status == no_depend);
++  static_assert(v6.ptr == nullptr);
++  static_assert(v6.size == sentinel_size);
++  constexpr auto v7 = local_lookup_core<std::byte>(L"consteval-builtin-std-embed.cpp");
++  static_assert(v7.status == no_depend);
++  static_assert(v7.ptr == nullptr);
++  static_assert(v7.size == sentinel_size);
++  constexpr auto v8 = local_lookup_core<std::byte>(u8"consteval-builtin-std-embed.cpp");
++  static_assert(v8.status == no_depend);
++  static_assert(v8.ptr == nullptr);
++  static_assert(v8.size == sentinel_size);
 +
-+	return true;
++  return true;
 +}
 +
 +consteval bool empty () {
-+	constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/a/b/empty");
-+	static_assert(v0.status == found_empty);
-+	static_assert(v0.ptr == nullptr);
-+	static_assert(v0.size == 0);
-+	constexpr auto v1 = non_local_lookup_core<unsigned char>(L"resources/a/b/empty");
-+	static_assert(v1.status == found_empty);
-+	static_assert(v1.ptr == nullptr);
-+	static_assert(v1.size == 0);
-+	constexpr auto v2 = non_local_lookup_core<unsigned char>(u8"resources/a/b/empty");
-+	static_assert(v2.status == found_empty);
-+	static_assert(v2.ptr == nullptr);
-+	static_assert(v2.size == 0);
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/a/b/empty");
++  static_assert(v0.status == found_empty);
++  static_assert(v0.ptr == nullptr);
++  static_assert(v0.size == 0);
++  constexpr auto v1 = non_local_lookup_core<unsigned char>(L"resources/a/b/empty");
++  static_assert(v1.status == found_empty);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == 0);
++  constexpr auto v2 = non_local_lookup_core<unsigned char>(u8"resources/a/b/empty");
++  static_assert(v2.status == found_empty);
++  static_assert(v2.ptr == nullptr);
++  static_assert(v2.size == 0);
 +
-+	constexpr auto v3 = non_local_lookup_core<char>("resources/a/b/empty");
-+	static_assert(v3.status == found_empty);
-+	static_assert(v3.ptr == nullptr);
-+	static_assert(v3.size == 0);
-+	constexpr auto v4 = non_local_lookup_core<char>(L"resources/a/b/empty");
-+	static_assert(v4.status == found_empty);
-+	static_assert(v4.ptr == nullptr);
-+	static_assert(v4.size == 0);
-+	constexpr auto v5 = non_local_lookup_core<char>(u8"resources/a/b/empty");
-+	static_assert(v5.status == found_empty);
-+	static_assert(v5.ptr == nullptr);
-+	static_assert(v5.size == 0);
++  constexpr auto v3 = non_local_lookup_core<char>("resources/a/b/empty");
++  static_assert(v3.status == found_empty);
++  static_assert(v3.ptr == nullptr);
++  static_assert(v3.size == 0);
++  constexpr auto v4 = non_local_lookup_core<char>(L"resources/a/b/empty");
++  static_assert(v4.status == found_empty);
++  static_assert(v4.ptr == nullptr);
++  static_assert(v4.size == 0);
++  constexpr auto v5 = non_local_lookup_core<char>(u8"resources/a/b/empty");
++  static_assert(v5.status == found_empty);
++  static_assert(v5.ptr == nullptr);
++  static_assert(v5.size == 0);
 +
-+	constexpr auto v6 = non_local_lookup_core<std::byte>("resources/a/b/empty");
-+	static_assert(v6.status == found_empty);
-+	static_assert(v6.ptr == nullptr);
-+	static_assert(v6.size == 0);
-+	constexpr auto v7 = non_local_lookup_core<std::byte>(L"resources/a/b/empty");
-+	static_assert(v7.status == found_empty);
-+	static_assert(v7.ptr == nullptr);
-+	static_assert(v7.size == 0);
-+	constexpr auto v8 = non_local_lookup_core<std::byte>(u8"resources/a/b/empty");
-+	static_assert(v8.status == found_empty);
-+	static_assert(v8.ptr == nullptr);
-+	static_assert(v8.size == 0);
++  constexpr auto v6 = non_local_lookup_core<std::byte>("resources/a/b/empty");
++  static_assert(v6.status == found_empty);
++  static_assert(v6.ptr == nullptr);
++  static_assert(v6.size == 0);
++  constexpr auto v7 = non_local_lookup_core<std::byte>(L"resources/a/b/empty");
++  static_assert(v7.status == found_empty);
++  static_assert(v7.ptr == nullptr);
++  static_assert(v7.size == 0);
++  constexpr auto v8 = non_local_lookup_core<std::byte>(u8"resources/a/b/empty");
++  static_assert(v8.status == found_empty);
++  static_assert(v8.ptr == nullptr);
++  static_assert(v8.size == 0);
 +
-+	return true;
++  return true;
 +}
 +
 +static_assert(does_not_exist());
@@ -2750,7 +2867,7 @@ index 000000000000..fd38c16435f4
 +"`P1040R10 <https://wg21.link/P1040R10>`__","``std::embed``","2026-06 (Brno)","","","`#190578 <https://github.com/llvm/llvm-project/pull/190578>`__","Experimental"
 +"", "", "", "", "", "", ""
 diff --git a/libcxx/docs/index.rst b/libcxx/docs/index.rst
-index 266f8c1b8ca0..60600eea9f64 100644
+index 38f77580d453..10086364088f 100644
 --- a/libcxx/docs/index.rst
 +++ b/libcxx/docs/index.rst
 @@ -49,6 +49,7 @@ Getting Started with libc++
@@ -2770,10 +2887,10 @@ index 266f8c1b8ca0..60600eea9f64 100644
  
  
 diff --git a/libcxx/include/CMakeLists.txt b/libcxx/include/CMakeLists.txt
-index 69a6590d18f8..239c3a8b6681 100644
+index 497aadfd799b..2d4cd1194368 100644
 --- a/libcxx/include/CMakeLists.txt
 +++ b/libcxx/include/CMakeLists.txt
-@@ -1012,6 +1012,7 @@ set(files
+@@ -1014,6 +1014,7 @@ set(files
    cwchar
    cwctype
    deque
@@ -2801,10 +2918,10 @@ index 3137ba2ea27e..ebc197515960 100644
  // NOLINTEND(libcpp-cpp-version-check)
 diff --git a/libcxx/include/embed b/libcxx/include/embed
 new file mode 100644
-index 000000000000..eeac5eaf1498
+index 000000000000..3f08828e2e09
 --- /dev/null
 +++ b/libcxx/include/embed
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,175 @@
 +// -*- C++ -*-
 +//===----------------------------------------------------------------------===//
 +//
@@ -2856,8 +2973,6 @@ index 000000000000..eeac5eaf1498
 +#include <__assert>
 +#include <__config>
 +#include <__cstddef/byte.h>
-+#include <__type_traits/is_enum.h>
-+#include <__type_traits/is_integral.h>
 +#include <__type_traits/is_same.h>
 +#include <__verbose_abort>
 +#include <optional>
@@ -2884,10 +2999,10 @@ index 000000000000..eeac5eaf1498
 +inline constexpr unsigned int __quoted_search_distance = 0b101;
 +
 +template <typename _Byte, size_t _Extent, typename _StrView>
-+consteval _LIBCPP_HIDE_FROM_ABI span<const _Byte, _Extent>
++_LIBCPP_NODISCARD consteval _LIBCPP_HIDE_FROM_ABI span<const _Byte, _Extent>
 +__embed(const _StrView& __resource_identifier, size_t __offset, [[maybe_unused]] const optional<size_t>& __limit) {
-+  static_assert(sizeof(_Byte) == 1 && alignof(_Byte) == 1 && (is_integral<_Byte>::value || is_enum<_Byte>::value),
-+                "embed _Byte type must be an enumeration or integral type with a size and alignment of 1");
++  static_assert(is_same_v<_Byte, unsigned char> || is_same_v<_Byte, char> || is_same_v<_Byte, byte>,
++                "embed type must be unqualified 'char', 'unsigned char', or 'byte'");
 +  size_t __size      = 0;
 +  _Byte const* __ptr = nullptr;
 +  int __status       = -1;
@@ -2926,7 +3041,7 @@ index 000000000000..eeac5eaf1498
 +  if (__status == __file_not_found) {
 +    _LIBCPP_VERBOSE_ABORT("file not found");
 +  } else if (__status == __file_found_no_depends) {
-+    _LIBCPP_VERBOSE_ABORT("file found but not appropriately '#depend <>'-ed");
++    _LIBCPP_VERBOSE_ABORT("file found but not appropriately '#depend <>'-ed on");
 +  }
 +  if constexpr (_Extent != std::dynamic_extent) {
 +    if (_Extent > __size) {
@@ -2944,36 +3059,36 @@ index 000000000000..eeac5eaf1498
 +}
 +} // namespace __embed_detail
 +
-+template <typename _Byte>
-+consteval span<const _Byte>
++template <typename _Byte = byte>
++_LIBCPP_NODISCARD consteval span<const _Byte>
 +embed(string_view __resource_identifier, size_t __offset = 0, optional<size_t> __limit = nullopt) {
 +  return __embed_detail::__embed<_Byte, dynamic_extent>(__resource_identifier, __offset, __limit);
 +}
 +
-+template <typename _Byte>
-+consteval span<const _Byte>
++template <typename _Byte = byte>
++_LIBCPP_NODISCARD consteval span<const _Byte>
 +embed(wstring_view __resource_identifier, size_t __offset = 0, optional<size_t> __limit = nullopt) {
 +  return __embed_detail::__embed<_Byte, dynamic_extent>(__resource_identifier, __offset, __limit);
 +}
 +
-+template <typename _Byte>
-+consteval span<const _Byte>
++template <typename _Byte = byte>
++_LIBCPP_NODISCARD consteval span<const _Byte>
 +embed(u8string_view __resource_identifier, size_t __offset = 0, optional<size_t> __limit = nullopt) {
 +  return __embed_detail::__embed<_Byte, dynamic_extent>(__resource_identifier, __offset, __limit);
 +}
 +
-+template <typename _Byte, size_t _Limit>
-+consteval span<const _Byte, _Limit> embed(string_view __resource_identifier, size_t __offset = 0) {
++template <size_t _Limit, typename _Byte = byte>
++_LIBCPP_NODISCARD consteval span<const _Byte, _Limit> embed(string_view __resource_identifier, size_t __offset = 0) {
 +  return __embed_detail::__embed<_Byte, _Limit>(__resource_identifier, __offset, nullopt);
 +}
 +
-+template <typename _Byte, size_t _Limit>
-+consteval span<const _Byte, _Limit> embed(wstring_view __resource_identifier, size_t __offset = 0) {
++template <size_t _Limit, typename _Byte = byte>
++_LIBCPP_NODISCARD consteval span<const _Byte, _Limit> embed(wstring_view __resource_identifier, size_t __offset = 0) {
 +  return __embed_detail::__embed<_Byte, _Limit>(__resource_identifier, __offset, nullopt);
 +}
 +
-+template <typename _Byte, size_t _Limit>
-+consteval span<const _Byte, _Limit> embed(u8string_view __resource_identifier, size_t __offset = 0) {
++template <size_t _Limit, typename _Byte = byte>
++_LIBCPP_NODISCARD consteval span<const _Byte, _Limit> embed(u8string_view __resource_identifier, size_t __offset = 0) {
 +  return __embed_detail::__embed<_Byte, _Limit>(__resource_identifier, __offset, nullopt);
 +}
 +
@@ -3005,6 +3120,161 @@ index 8ff06dae7bb0..07a7594af019 100644
  #endif // __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
  
  // clang-format on
+diff --git a/libcxx/test/std/embed/a.txt b/libcxx/test/std/embed/a.txt
+new file mode 100644
+index 000000000000..78981922613b
+--- /dev/null
++++ b/libcxx/test/std/embed/a.txt
+@@ -0,0 +1 @@
++a
+diff --git a/libcxx/test/std/embed/embed-mandates.verify.cpp b/libcxx/test/std/embed/embed-mandates.verify.cpp
+new file mode 100644
+index 000000000000..e6b9bbe97358
+--- /dev/null
++++ b/libcxx/test/std/embed/embed-mandates.verify.cpp
+@@ -0,0 +1,34 @@
++//===----------------------------------------------------------------------===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20
++
++// check that <embed> functions are marked [[nodiscard]]
++
++#include <embed>
++
++#depend __FILE__
++
++#include "test_macros.h"
++
++consteval void test() {
++#if TEST_STD_VER >= 23
++  // make sure to test each individual overload
++  (void)std::embed<signed char>(__FILE__);
++  // expected-error@-1 {{embed type must be unqualified 'char', 'unsigned char', or 'byte'}}
++  (void)std::embed("praise the sun!");
++  // expected-error@-1 {{file not found}}
++  (void)std::embed<signed char>("a.txt");
++  // expected-error@-1 {{file found but not appropriately '#depend <>'-ed on}}
++  (void)std::embed<1234>("a.txt");
++  // expected-error@-1 {{the fixed-size span extent is larger than the resource data size}}
++#endif
++}
++
++#undef STR_PREFIX_
++#undef STR_PREFIX
+diff --git a/libcxx/test/std/embed/embed-nodiscard.verify.cpp b/libcxx/test/std/embed/embed-nodiscard.verify.cpp
+new file mode 100644
+index 000000000000..9381ea53b165
+--- /dev/null
++++ b/libcxx/test/std/embed/embed-nodiscard.verify.cpp
+@@ -0,0 +1,43 @@
++//===----------------------------------------------------------------------===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20
++
++// check that <embed> functions are marked [[nodiscard]]
++
++#include <embed>
++
++#depend __FILE__
++
++#include "test_macros.h"
++
++#define STR_PREFIX_(a, b) a##b
++#define STR_PREFIX(a, b) STR_PREFIX_(a, b)
++
++consteval void test() {
++#if TEST_STD_VER >= 23
++  // make sure to test each individual overload
++  std::embed(__FILE__);
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  std::embed<1>(__FILE__);
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++
++  std::embed(STR_PREFIX(L, __FILE__));
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  std::embed<1>(STR_PREFIX(L, __FILE__));
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++
++  std::embed(STR_PREFIX(u8, __FILE__));
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  std::embed<1>(STR_PREFIX(u8, __FILE__));
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++#endif
++}
++
++#undef STR_PREFIX_
++#undef STR_PREFIX
+diff --git a/libcxx/test/std/embed/embed-post-conditions.pass.cpp b/libcxx/test/std/embed/embed-post-conditions.pass.cpp
+new file mode 100644
+index 000000000000..32d164dc47ed
+--- /dev/null
++++ b/libcxx/test/std/embed/embed-post-conditions.pass.cpp
+@@ -0,0 +1,50 @@
++//===----------------------------------------------------------------------===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20
++
++// check that <embed> functions are marked [[nodiscard]]
++
++// clang-format off
++
++#include <embed>
++
++#depend __FILE__
++#depend "a"
++#depend "empty"
++
++#include "test_macros.h"
++
++consteval void main(int, char*[]) {
++#if TEST_STD_VER >= 23
++  constexpr auto v0 = std::embed("a.txt");
++  static_assert(v0.data() != nullptr);
++  static_assert(v0.size() == 1);
++  static_assert(v0[0] == (std::byte)u8'a');
++
++  constexpr auto v1 = std::embed(__FILE__);
++  static_assert(v1.data() == nullptr);
++  static_assert(v1.size() == 0);
++
++  constexpr auto v2 = std::embed(__FILE__, 0x123456);
++  static_assert(v2.data() == nullptr);
++  static_assert(v2.size() == 0);
++
++  constexpr auto v3 = std::embed(__FILE__, 0, 0);
++  static_assert(v3.data() == nullptr);
++  static_assert(v3.size() == 0);
++
++  constexpr auto v4 = std::embed<0>(__FILE__);
++  static_assert(v4.data() == nullptr);
++  static_assert(v4.size() == 0);
++
++  constexpr auto v4 = std::embed("empty");
++  static_assert(v4.data() == nullptr);
++  static_assert(v4.size() == 0);
++#endif
++}
+diff --git a/libcxx/test/std/embed/empty b/libcxx/test/std/embed/empty
+new file mode 100644
+index 000000000000..e69de29bb2d1
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp
 index beecf87cd4aa..17d50b313591 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp

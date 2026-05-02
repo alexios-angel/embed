@@ -1,57 +1,81 @@
-From b35df51ae03ca5b6dedd7e8d7a5b74fab9e94a18 Mon Sep 17 00:00:00 2001
+From 52ed4167c33764cbd2ad86d252ebbd7709ccf02b Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Bj=C3=B6rkus=20=27ThePhD=27=20Dorkus?=
  <phdofthehouse@gmail.com>
-Date: Fri, 24 Apr 2026 09:04:15 +0200
-Subject: [PATCH] =?UTF-8?q?[libcpp][libstdc++-v][gcc/c-family][gcc/cp][gcc?=
- =?UTF-8?q?]=20=F0=9F=8E=89=20full=20core=20implementation=20of=20#embed?=
- =?UTF-8?q?=20(no=20tests=20yet)?=
+Date: Sun, 3 May 2026 00:24:35 +0200
+Subject: [PATCH] =?UTF-8?q?[libcpp][libstdc++-v3][gcc/c-family][gcc/cp][gc?=
+ =?UTF-8?q?c][wwwdocs]=20=F0=9F=8E=89=20full=20implementation=20of=20#depe?=
+ =?UTF-8?q?nd=20and=20std::embed?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
 Signed-off-by: Björkus 'ThePhD' Dorkus <phdofthehouse@gmail.com>
 ---
- gcc/ChangeLog                         |  31 +-
- gcc/builtin-types.def                 |   7 +
- gcc/builtins.cc                       | 302 +++++++++-
- gcc/builtins.def                      |   3 +
- gcc/c-family/ChangeLog                |  13 +-
- gcc/c-family/c-common.cc              | 190 +++++-
- gcc/c-family/c-common.h               |   7 +-
- gcc/c-family/c-opts.cc                |  12 +
- gcc/c/c-typeck.cc                     |  84 +--
- gcc/cp/ChangeLog                      |  16 +-
- gcc/cp/call.cc                        |   7 +-
- gcc/cp/constexpr.cc                   |  28 +
- gcc/cp/tree.cc                        |  16 +-
- gcc/doc/extend.texi                   | 802 ++++++++++++++------------
- gcc/incpath.cc                        | 172 ++++++
- gcc/incpath.h                         |  23 +
- gcc/tree-core.h                       |  15 +
- gcc/tree.cc                           | 149 ++++-
- gcc/tree.h                            |  12 +
- include/ChangeLog                     |  33 +-
- include/filenames.h                   |   4 +
- libcpp/ChangeLog                      |  21 +-
- libcpp/directives.cc                  |  59 ++
- libcpp/files.cc                       | 456 ++++++++++++++-
- libcpp/include/cpplib.h               |  61 ++
- libcpp/init.cc                        |   1 +
- libcpp/internal.h                     |  12 +-
- libstdc++-v3/ChangeLog                |  11 +-
- libstdc++-v3/include/Makefile.am      |   1 +
- libstdc++-v3/include/Makefile.in      |  23 +-
- libstdc++-v3/include/bits/version.def |  10 +
- libstdc++-v3/include/bits/version.h   |  10 +
- libstdc++-v3/include/std/embed        | 272 +++++++++
- 33 files changed, 2361 insertions(+), 502 deletions(-)
+ gcc/ChangeLog                                 |  31 +-
+ gcc/builtin-attrs.def                         |   6 +-
+ gcc/builtin-types.def                         |   7 +
+ gcc/builtins.cc                               | 302 ++++++-
+ gcc/builtins.def                              |   3 +
+ gcc/c-family/ChangeLog                        |  14 +-
+ gcc/c-family/c-common.cc                      | 191 ++++-
+ gcc/c-family/c-common.h                       |   7 +-
+ gcc/c-family/c-opts.cc                        |  12 +
+ gcc/c-family/c.opt                            |  20 +
+ gcc/c/c-typeck.cc                             |  84 +-
+ gcc/cp/ChangeLog                              |  16 +-
+ gcc/cp/call.cc                                |   7 +-
+ gcc/cp/constexpr.cc                           |  28 +
+ gcc/cp/tree.cc                                |  16 +-
+ gcc/doc/extend.texi                           | 796 ++++++++++--------
+ gcc/doc/invoke.texi                           |  12 +
+ gcc/incpath.cc                                | 172 ++++
+ gcc/incpath.h                                 |  23 +
+ .../cpp/embed-dir/resources/a/b/empty         |   0
+ .../cpp/embed-dir/resources/art.bin           |   1 +
+ .../g++.dg/ext/builtin-std-embed-errors1.C    |  47 ++
+ gcc/testsuite/g++.dg/ext/builtin-std-embed1.C |  70 ++
+ gcc/testsuite/g++.dg/ext/builtin-std-embed2.C | 196 +++++
+ gcc/testsuite/g++.dg/ext/builtin-std-embed3.C | 198 +++++
+ gcc/tree-core.h                               |  15 +
+ gcc/tree.cc                                   | 149 +++-
+ gcc/tree.h                                    |  12 +
+ include/ChangeLog                             |  33 +-
+ include/filenames.h                           |   4 +
+ libcpp/ChangeLog                              |  21 +-
+ libcpp/directives.cc                          |  85 +-
+ libcpp/files.cc                               | 456 +++++++++-
+ libcpp/include/cpplib.h                       |  68 +-
+ libcpp/init.cc                                |  66 +-
+ libcpp/internal.h                             |  12 +-
+ libstdc++-v3/ChangeLog                        |  11 +-
+ libstdc++-v3/include/Makefile.am              |   1 +
+ libstdc++-v3/include/Makefile.in              |  23 +-
+ libstdc++-v3/include/bits/version.def         |  10 +
+ libstdc++-v3/include/bits/version.h           |  10 +
+ libstdc++-v3/include/std/embed                | 272 ++++++
+ libstdc++-v3/testsuite/std/embed/mandates.cc  |   0
+ libstdc++-v3/testsuite/std/embed/nodiscard.cc |  25 +
+ .../testsuite/std/embed/post-conditions.cc    |   0
+ 45 files changed, 2994 insertions(+), 538 deletions(-)
+ create mode 100644 gcc/testsuite/c-c++-common/cpp/embed-dir/resources/a/b/empty
+ create mode 100644 gcc/testsuite/c-c++-common/cpp/embed-dir/resources/art.bin
+ create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed-errors1.C
+ create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed1.C
+ create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed2.C
+ create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed3.C
  create mode 100644 libstdc++-v3/include/std/embed
+ create mode 100644 libstdc++-v3/testsuite/std/embed/mandates.cc
+ create mode 100644 libstdc++-v3/testsuite/std/embed/nodiscard.cc
+ create mode 100644 libstdc++-v3/testsuite/std/embed/post-conditions.cc
 
 diff --git a/gcc/ChangeLog b/gcc/ChangeLog
-index f01e9376214..23bc70cb93f 100644
+index c12ecdb1cac..4e9c2722996 100644
 --- a/gcc/ChangeLog
 +++ b/gcc/ChangeLog
-@@ -1,3 +1,32 @@
+@@ -1526,6 +1526,35 @@
+ 
+ 	* config/riscv/riscv.cc (vxrm_unknown_p): Remove `CALL_P` check
+ 
 +2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
 +
 +	* doc/extend.texi: document new __builtin_std_embed builtin.
@@ -84,7 +108,7 @@ index f01e9376214..23bc70cb93f 100644
  2026-04-22  Sam James  <sam@gentoo.org>
  
  	* ipa-prop.cc (param_type_may_change_p): Fix comment typo.
-@@ -6832,7 +6861,7 @@
+@@ -8360,7 +8389,7 @@
  	* doc/install.texi: Ditto.
  	* doc/invoke.texi: Ditto.
  
@@ -93,8 +117,29 @@ index f01e9376214..23bc70cb93f 100644
  Copyright (C) 2026 Free Software Foundation, Inc.
  
  Copying and distribution of this file, with or without modification,
+diff --git a/gcc/builtin-attrs.def b/gcc/builtin-attrs.def
+index be80184b1a1..c29d7438c9e 100644
+--- a/gcc/builtin-attrs.def
++++ b/gcc/builtin-attrs.def
+@@ -471,6 +471,11 @@ DEF_ATTR_TREE_LIST (ATTR_TMPURE_NORETURN_NOTHROW_LEAF_COLD_LIST,
+ 		    ATTR_COLD, ATTR_NULL,
+ 		    ATTR_TMPURE_NORETURN_NOTHROW_LEAF_LIST)
+ 
++/* Nothrow const leaf warn unused functions which are type-generic.  */
++DEF_ATTR_TREE_LIST (ATTR_WARN_UNUSED_RESULT_CONST_NOTHROW_TYPEGENERIC_LEAF,
++		    ATTR_WARN_UNUSED_RESULT, ATTR_NULL,
++		    ATTR_CONST_NOTHROW_TYPEGENERIC_LEAF)
++
+ /* Construct a tree for a format_arg attribute.  */
+ #define DEF_FORMAT_ARG_ATTRIBUTE(FA)					\
+   DEF_ATTR_TREE_LIST (ATTR_FORMAT_ARG_##FA, ATTR_FORMAT_ARG,		\
+@@ -478,4 +483,3 @@ DEF_ATTR_TREE_LIST (ATTR_TMPURE_NORETURN_NOTHROW_LEAF_COLD_LIST,
+ DEF_FORMAT_ARG_ATTRIBUTE(1)
+ DEF_FORMAT_ARG_ATTRIBUTE(2)
+ #undef DEF_FORMAT_ARG_ATTRIBUTE
+-
 diff --git a/gcc/builtin-types.def b/gcc/builtin-types.def
-index ab0cbc65cfc..c133f3f9e5d 100644
+index ab0cbc65cfc..ed7888de2ad 100644
 --- a/gcc/builtin-types.def
 +++ b/gcc/builtin-types.def
 @@ -220,6 +220,10 @@ DEF_PRIMITIVE_TYPE (BT_PTR_CONST_STRING,
@@ -112,9 +157,9 @@ index ab0cbc65cfc..c133f3f9e5d 100644
  			 BT_SSIZE, BT_STRING, BT_SIZE, BT_CONST_STRING)
  DEF_FUNCTION_TYPE_VAR_3 (BT_FN_INT_FILEPTR_INT_CONST_STRING_VAR,
  			 BT_INT, BT_FILEPTR, BT_INT, BT_CONST_STRING)
-+DEF_FUNCTION_TYPE_VAR_3 (BT_FN_CONST_PTR_INT_INT_REF_SIZE_REF_VAR,
++DEF_FUNCTION_TYPE_VAR_3 (BT_FN_CONST_PTR_UINT_INT_REF_SIZE_REF_VAR,
 +			 BT_CONST_PTR,
-+			 BT_INT, BT_INT_REF, BT_SIZE_REF)
++			 BT_UINT, BT_INT_REF, BT_SIZE_REF)
  
  DEF_FUNCTION_TYPE_VAR_4 (BT_FN_INT_STRING_INT_SIZE_CONST_STRING_VAR,
  			 BT_INT, BT_STRING, BT_INT, BT_SIZE, BT_CONST_STRING)
@@ -467,7 +512,7 @@ index 692e20088c2..30bb9716d8e 100644
        break;
      }
 diff --git a/gcc/builtins.def b/gcc/builtins.def
-index 8ab0599b17f..609612a9f9e 100644
+index 8ab0599b17f..92f69e28032 100644
 --- a/gcc/builtins.def
 +++ b/gcc/builtins.def
 @@ -1267,6 +1267,9 @@ DEF_BUILTIN_STUB (BUILT_IN_EH_COPY_VALUES, "__builtin_eh_copy_values")
@@ -475,31 +520,35 @@ index 8ab0599b17f..609612a9f9e 100644
  DEF_GCC_BUILTIN (BUILT_IN_FUNCTION, "FUNCTION", BT_FN_CONST_STRING, ATTR_NOTHROW_LEAF_LIST)
  DEF_GCC_BUILTIN (BUILT_IN_LINE, "LINE", BT_FN_INT, ATTR_NOTHROW_LEAF_LIST)
 +DEF_GCC_BUILTIN (BUILT_IN_STD_EMBED, "std_embed",
-+		 BT_FN_CONST_PTR_INT_INT_REF_SIZE_REF_VAR,
-+		 ATTR_CONST_NOTHROW_TYPEGENERIC_LEAF)
++		 BT_FN_CONST_PTR_UINT_INT_REF_SIZE_REF_VAR,
++		 ATTR_WARN_UNUSED_RESULT_CONST_NOTHROW_TYPEGENERIC_LEAF)
  
  /* Control Flow Redundancy hardening out-of-line checker.  */
  DEF_BUILTIN_STUB (BUILT_IN___HARDCFR_CHECK, "__builtin___hardcfr_check")
 diff --git a/gcc/c-family/ChangeLog b/gcc/c-family/ChangeLog
-index d5036a2ac39..f2bdaf5b3b2 100644
+index aa40526bd07..b866f2f1f03 100644
 --- a/gcc/c-family/ChangeLog
 +++ b/gcc/c-family/ChangeLog
-@@ -1,3 +1,14 @@
+@@ -20,6 +20,18 @@
+ 	* c-lex.cc (interpret_integer): Use _BitInt(1) type for 0wb
+ 	if flag_isoc2y, rather than _BitInt(2).
+ 
 +2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
 +
 +	* c-common.cc (check_builtin_arguments): modify to allow passing pointer
 +	to the function itself and not just fndecl/orig_fndecl, to allow for
 +	modification of a function's return type during type checking. Add
 +	BUILT_IN_STD_EMBED case.
-+	* c-common.h (heck_builtin_function_arguments): same.
++	* c-common.h (check_builtin_function_arguments): same.
 +	* c-opts.cc (c_common_finish): use cpp_destrpy_all_dep_patterns and
 +	connect new cb_depend function to updated cpp_callbacks value.
++	* c.opt: Add new options for -std=c++2d|c++29|gnu++2d|gnu++29.
 +
 +
  2026-04-22  Jakub Jelinek  <jakub@redhat.com>
  
  	* c-cppbuiltin.cc (c_cpp_builtins): Bump __cpp_impl_reflection value
-@@ -16997,7 +17008,7 @@
+@@ -17019,7 +17031,7 @@
  
  	* c-common.c: Include gt-c-family-c-common.h.
  	* c-pragma.c: Include gt-c-family-c-pragma.h.
@@ -509,7 +558,7 @@ index d5036a2ac39..f2bdaf5b3b2 100644
  
  Copying and distribution of this file, with or without modification,
 diff --git a/gcc/c-family/c-common.cc b/gcc/c-family/c-common.cc
-index 5acb221d31f..360eaec3e47 100644
+index dcbf5192fc1..e4269209ee8 100644
 --- a/gcc/c-family/c-common.cc
 +++ b/gcc/c-family/c-common.cc
 @@ -176,7 +176,7 @@ machine_mode c_default_pointer_mode = VOIDmode;
@@ -602,7 +651,7 @@ index 5acb221d31f..360eaec3e47 100644
  static void def_builtin_1  (enum built_in_function fncode,
  			    const char *name,
  			    enum built_in_class fnclass,
-@@ -3983,7 +3983,7 @@ c_common_get_alias_set (tree t)
+@@ -3985,7 +3985,7 @@ c_common_get_alias_set (tree t)
  
    return -1;
  }
@@ -611,7 +660,7 @@ index 5acb221d31f..360eaec3e47 100644
  /* Compute the value of 'sizeof (TYPE)' or '__alignof__ (TYPE)', where
     the IS_SIZEOF parameter indicates which operator is being applied.
     The COMPLAIN flag controls whether we should diagnose possibly
-@@ -4165,7 +4165,7 @@ c_countof_type (location_t loc, tree type)
+@@ -4167,7 +4167,7 @@ c_countof_type (location_t loc, tree type)
    value = fold_convert_loc (loc, size_type_node, value);
    return value;
  }
@@ -620,7 +669,7 @@ index 5acb221d31f..360eaec3e47 100644
  /* Implement the _Maxof operator:
     Return the maximum representable value of an integer type.  */
  
-@@ -4207,7 +4207,7 @@ c_minof_type (location_t loc, tree type)
+@@ -4209,7 +4209,7 @@ c_minof_type (location_t loc, tree type)
  
    return TYPE_MIN_VALUE (type);
  }
@@ -629,7 +678,7 @@ index 5acb221d31f..360eaec3e47 100644
  /* Handle C and C++ default attributes.  */
  
  enum built_in_attribute
-@@ -5184,7 +5184,7 @@ def_builtin_1 (enum built_in_function fncode,
+@@ -5186,7 +5186,7 @@ def_builtin_1 (enum built_in_function fncode,
      add_builtin_function (libname, libtype, fncode, fnclass,
  			  NULL, fnattrs);
  }
@@ -638,7 +687,7 @@ index 5acb221d31f..360eaec3e47 100644
  /* Nonzero if the type T promotes to int.  This is (nearly) the
     integral promotions defined in ISO C99 6.3.1.1/2.  */
  
-@@ -5586,7 +5586,7 @@ finish_label_address_expr (tree label, location_t loc)
+@@ -5588,7 +5588,7 @@ finish_label_address_expr (tree label, location_t loc)
  
    return result;
  }
@@ -647,7 +696,7 @@ index 5acb221d31f..360eaec3e47 100644
  
  /* Given a boolean expression ARG, return a tree representing an increment
     or decrement (as indicated by CODE) of ARG.  The front end must check for
-@@ -5626,7 +5626,7 @@ boolean_increment (enum tree_code code, tree arg)
+@@ -5628,7 +5628,7 @@ boolean_increment (enum tree_code code, tree arg)
    TREE_SIDE_EFFECTS (val) = 1;
    return val;
  }
@@ -656,7 +705,7 @@ index 5acb221d31f..360eaec3e47 100644
  /* Built-in macros for stddef.h and stdint.h, that require macros
     defined in this file.  */
  void
-@@ -6388,7 +6388,7 @@ attribute_fallthrough_p (tree attr)
+@@ -6390,7 +6390,7 @@ attribute_fallthrough_p (tree attr)
    return true;
  }
  
@@ -665,7 +714,7 @@ index 5acb221d31f..360eaec3e47 100644
  /* Check for valid arguments being passed to a function with FNTYPE.
     There are NARGS arguments in the array ARGARRAY.  LOC should be used
     for diagnostics.  Return true if either -Wnonnull or -Wrestrict has
-@@ -6574,6 +6574,150 @@ builtin_function_validate_nargs (location_t loc, tree fndecl, int nargs,
+@@ -6576,6 +6576,151 @@ builtin_function_validate_nargs (location_t loc, tree fndecl, int nargs,
     ? EXPR_LOC_OR_LOC (args[(N)], input_location)	\
     : expansion_point_location (arg_loc[(N)]))
  
@@ -690,8 +739,8 @@ index 5acb221d31f..360eaec3e47 100644
 +  if (!INTEGRAL_TYPE_P (TREE_TYPE (locus_arg)))
 +    {
 +      if (complain)
-+	error_at (ARG_LOCATION(0), "argument 1 to function %qE must "
-+				   "be an integer type", fndecl);
++	error_at (ARG_LOCATION (0), "argument 1 to function %qE must "
++				    "be an integer type", fndecl);
 +      return false;
 +    }
 +  tree &status_out_arg = args[1];
@@ -702,8 +751,8 @@ index 5acb221d31f..360eaec3e47 100644
 +  if (!status_out_is_lvalue || status_out_no_ref_type != integer_type_node)
 +    {
 +      if (complain)
-+	error_at (ARG_LOCATION(1), "argument 2 to function %qE must "
-+				   "be a reference to an 'int'", fndecl);
++	error_at (ARG_LOCATION (1), "argument 2 to function %qE must "
++				    "be a reference to an 'int'", fndecl);
 +      return false;
 +    }
 +  tree &size_out_arg = args[2];
@@ -714,7 +763,7 @@ index 5acb221d31f..360eaec3e47 100644
 +  if (!size_out_is_lvalue || size_out_no_ref_type != size_type_node)
 +    {
 +      if (complain)
-+	error_at (ARG_LOCATION(2),
++	error_at (ARG_LOCATION (2),
 +		  "argument 3 to function %qE must be a "
 +		  "reference to a 'size_t'", fndecl);
 +      return false;
@@ -724,9 +773,10 @@ index 5acb221d31f..360eaec3e47 100644
 +  if (!POINTER_TYPE_P (ptr_indicator_arg_type))
 +    {
 +      if (complain)
-+	error_at (ARG_LOCATION(3),
-+		  "argument 4 to function %qE must be a "
-+		  "pointer to a 'const' type", fndecl);
++	error_at (ARG_LOCATION (3),
++		  "argument 4 to %qE must be a "
++		  "pointer to a 'const' integer or enumeration "
++		  "type of sizeof and alignof equal to 1", fndecl);
 +      return false;
 +    }
 +  const_tree const_elem_type =
@@ -739,7 +789,7 @@ index 5acb221d31f..360eaec3e47 100644
 +  if (!is_const_elem_type || !is_valid_elem_type)
 +    {
 +      if (complain)
-+	error_at (ARG_LOCATION(3),
++	error_at (ARG_LOCATION (3),
 +		  "argument 4 to %qE must be a "
 +		  "pointer to a 'const' integer or enumeration "
 +		  "type of sizeof and alignof equal to 1", fndecl);
@@ -750,7 +800,7 @@ index 5acb221d31f..360eaec3e47 100644
 +  if (!INTEGRAL_TYPE_P (resource_name_size_arg_type))
 +    {
 +      if (complain)
-+	error_at (ARG_LOCATION(4),
++	error_at (ARG_LOCATION (4),
 +		  "argument 5 to function %qE must be an "
 +		  "integer type", fndecl);
 +      return false;
@@ -773,7 +823,7 @@ index 5acb221d31f..360eaec3e47 100644
 +  if (!is_resource_name_ptr_arg_ptr || !is_valid_name_type)
 +    {
 +      if (complain)
-+	error_at (ARG_LOCATION(5),
++	error_at (ARG_LOCATION (5),
 +		  "argument 6 to function %qE must be a "
 +		  "pointer to 'char', 'wchar_t',  or 'char8_t'", fndecl);
 +      return false;
@@ -783,7 +833,7 @@ index 5acb221d31f..360eaec3e47 100644
 +  if (!INTEGRAL_TYPE_P (offset_arg_type))
 +    {
 +      if (complain)
-+	error_at (ARG_LOCATION(6),
++	error_at (ARG_LOCATION (6),
 +		  "argument 7 to function %qE must be an "
 +		  "integral type", fndecl);
 +      return false;
@@ -796,7 +846,7 @@ index 5acb221d31f..360eaec3e47 100644
 +      if (!INTEGRAL_TYPE_P (limit_arg_type))
 +	{
 +	  if (complain)
-+	    error_at (ARG_LOCATION(7),
++	    error_at (ARG_LOCATION (7),
 +		      "argument 8 to function %qE must be an "
 +		      "integral type", fndecl);
 +	  return false;
@@ -816,7 +866,7 @@ index 5acb221d31f..360eaec3e47 100644
  /* Verifies the NARGS arguments ARGS to the builtin function FNDECL.
     Returns false if there was an error, otherwise true.  LOC is the
     location of the function; ARG_LOC is a vector of locations of the
-@@ -6583,8 +6727,8 @@ builtin_function_validate_nargs (location_t loc, tree fndecl, int nargs,
+@@ -6585,8 +6730,8 @@ builtin_function_validate_nargs (location_t loc, tree fndecl, int nargs,
  
  bool
  check_builtin_function_arguments (location_t loc, vec<location_t> arg_loc,
@@ -827,7 +877,7 @@ index 5acb221d31f..360eaec3e47 100644
  {
    if (!fndecl_built_in_p (fndecl))
      return true;
-@@ -6974,7 +7118,9 @@ check_builtin_function_arguments (location_t loc, vec<location_t> arg_loc,
+@@ -6976,7 +7121,9 @@ check_builtin_function_arguments (location_t loc, vec<location_t> arg_loc,
  	  return false;
  	}
        return true;
@@ -838,7 +888,7 @@ index 5acb221d31f..360eaec3e47 100644
      default:
        return true;
      }
-@@ -7346,7 +7492,7 @@ fold_offsetof (tree expr, tree type, enum tree_code ctx)
+@@ -7348,7 +7495,7 @@ fold_offsetof (tree expr, tree type, enum tree_code ctx)
      return size_binop (PLUS_EXPR, base, convert (type, off));
    return fold_build_pointer_plus (base, off);
  }
@@ -847,7 +897,7 @@ index 5acb221d31f..360eaec3e47 100644
  /* *PTYPE is an incomplete array.  Complete it with a domain based on
     INITIAL_VALUE.  If INITIAL_VALUE is not present, use 1 if DO_DEFAULT
     is true.  Return 0 if successful, 1 if INITIAL_VALUE can't be deciphered,
-@@ -7555,7 +7701,7 @@ c_common_mark_addressable_vec (tree t)
+@@ -7557,7 +7704,7 @@ c_common_mark_addressable_vec (tree t)
  }
  
  
@@ -857,7 +907,7 @@ index 5acb221d31f..360eaec3e47 100644
     the correct size doesn't exist, use error_mark_node instead of NULL.
     The later results in segfaults even when a decl using the type doesn't
 diff --git a/gcc/c-family/c-common.h b/gcc/c-family/c-common.h
-index 89517e2a80c..e6f130725a8 100644
+index a4cd6786109..665ab3dddbd 100644
 --- a/gcc/c-family/c-common.h
 +++ b/gcc/c-family/c-common.h
 @@ -630,7 +630,7 @@ extern tree build_indirect_ref (location_t, tree, ref_operator);
@@ -925,6 +975,51 @@ index c818a0802ce..4b67e3edc6e 100644
  /* Set the C 89 standard (with 1994 amendments if C94, without GNU
     extensions if ISO).  There is no concept of gnu94.  */
  static void
+diff --git a/gcc/c-family/c.opt b/gcc/c-family/c.opt
+index 3d96a73ecee..0073df24a74 100644
+--- a/gcc/c-family/c.opt
++++ b/gcc/c-family/c.opt
+@@ -531,6 +531,10 @@ Wc++26-extensions
+ C++ ObjC++ Var(warn_cxx26_extensions) Warning Init(1) CppReason(CPP_W_CXX26_EXTENSIONS)
+ Warn about C++26 constructs in code compiled with an older standard.
+ 
++Wc++29-extensions
++C++ ObjC++ Var(warn_cxx29_extensions) Warning Init(1) CppReason(CPP_W_CXX29_EXTENSIONS)
++Warn about C++29 constructs in code compiled with an older standard.
++
+ Wcalloc-transposed-args
+ C ObjC C++ ObjC++ Var(warn_calloc_transposed_args) Warning LangEnabledBy(C ObjC C++ ObjC++,Wextra)
+ Warn about suspicious calls to calloc-like functions where sizeof expression is the earlier size argument and not the latter.
+@@ -2676,6 +2680,14 @@ std=c++26
+ C++ ObjC++ Undocumented
+ Conform to the ISO 2026 C++ draft standard (experimental and incomplete support).
+ 
++std=c++2d
++C++ ObjC++ Alias(std=c++29)
++Conform to the ISO 2029 C++ draft standard (experimental and incomplete support).
++
++std=c++29
++C++ ObjC++ Undocumented
++Conform to the ISO 2029 C++ draft standard (experimental and incomplete support).
++
+ std=c11
+ C ObjC
+ Conform to the ISO 2011 C standard.
+@@ -2778,6 +2790,14 @@ std=gnu++26
+ C++ ObjC++ Undocumented
+ Conform to the ISO 2026 C++ draft standard with GNU extensions (experimental and incomplete support).
+ 
++std=gnu++2d
++C++ ObjC++ Alias(std=gnu++29)
++Conform to the ISO 2029 C++ draft standard with GNU extensions (experimental and incomplete support).
++
++std=gnu++29
++C++ ObjC++ Undocumented
++Conform to the ISO 2029 C++ draft standard with GNU extensions (experimental and incomplete support).
++
+ std=gnu11
+ C ObjC
+ Conform to the ISO 2011 C standard with GNU extensions.
 diff --git a/gcc/c/c-typeck.cc b/gcc/c/c-typeck.cc
 index aa368a6e95a..be934f309a1 100644
 --- a/gcc/c/c-typeck.cc
@@ -1308,10 +1403,13 @@ index aa368a6e95a..be934f309a1 100644
     statement.  LOC is the location of the construct.  */
  
 diff --git a/gcc/cp/ChangeLog b/gcc/cp/ChangeLog
-index 52fbbfaed94..b5a8f9d19f2 100644
+index ef341f72631..be9d7894c22 100644
 --- a/gcc/cp/ChangeLog
 +++ b/gcc/cp/ChangeLog
-@@ -1,3 +1,17 @@
+@@ -192,6 +192,20 @@
+ 	(tsubst_expr) <case REFLECT_EXPR>: Adjust the call to
+ 	tsubst_qualified_id.
+ 
 +2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
 +
 +	* call.cc (magic_varargs_p): add BUILT_IN_STD_EMBED as variable
@@ -1329,7 +1427,7 @@ index 52fbbfaed94..b5a8f9d19f2 100644
  2026-04-22  Jason Merrill  <jason@redhat.com>
  
  	PR c++/124973
-@@ -2681,7 +2695,7 @@
+@@ -2875,7 +2889,7 @@
  	* decl2.cc (is_late_template_attribute): Return false also for
  	[[maybe_unused]] attribute on TYPE_DECLs to dependent types.
  
@@ -1364,7 +1462,7 @@ index 92c3a23ab8d..460da1a291c 100644
        else if (fndecl_built_in_p (fndecl, BUILT_IN_CLEAR_PADDING))
  	{
 diff --git a/gcc/cp/constexpr.cc b/gcc/cp/constexpr.cc
-index a593b66dd41..cbbee9df285 100644
+index e9388a6ba7f..fec62a5f00e 100644
 --- a/gcc/cp/constexpr.cc
 +++ b/gcc/cp/constexpr.cc
 @@ -54,6 +54,30 @@ static HOST_WIDE_INT find_array_ctor_elt (tree ary, tree dindex,
@@ -1407,7 +1505,7 @@ index a593b66dd41..cbbee9df285 100644
    if (fun == NULL_TREE)
      return cxx_eval_internal_function (ctx, t, lval,
  				       non_constant_p, overflow_p,
-@@ -10853,6 +10879,8 @@ cxx_eval_outermost_constant_expr (tree t, bool allow_non_constant,
+@@ -10852,6 +10878,8 @@ cxx_eval_outermost_constant_expr (tree t, bool allow_non_constant,
  			allow_non_constant, strict,
  			!allow_non_constant ? mce_true : manifestly_const_eval };
  
@@ -1507,7 +1605,7 @@ index c510a5bf2d0..acef87c33f8 100644
  /* Complain that some language-specific thing hanging off a tree
     node has been accessed improperly.  */
 diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
-index 7de7eab3aa5..375fe211553 100644
+index 0faa5323ce1..12df2c3d830 100644
 --- a/gcc/doc/extend.texi
 +++ b/gcc/doc/extend.texi
 @@ -1432,7 +1432,7 @@ instruction. Pointers to this address space are 16 bits wide.
@@ -2924,17 +3022,11 @@ index 7de7eab3aa5..375fe211553 100644
  compiler may also ignore this parameter.
  @enddefbuiltin
  
-@@ -18545,6 +18545,96 @@ Returns the openacc gang, worker or vector size depending on whether @var{x} is
+@@ -18545,6 +18545,90 @@ Returns the openacc gang, worker or vector size depending on whether @var{x} is
  0, 1 or 2.
  @enddefbuiltin
  
-+@defbuiltin{template <typename Ty, typename Ch>
-+consteval
-+Ty const* __builtin_std_embed (unsigned int @var{locus}, int & @var{status},
-+  size_t & @var{out_size}, Ty const* @var{indicator_ptr}
-+  size_t @var{resource_name_size}, Ch const* @var{resource_name},
-+  size_t @var{offset}, size_t @var{limit})
-+}
++@defbuiltin{Ty const* __builtin_std_embed (unsigned int @var{locus}, int & @var{status}, size_t & @var{out_size}, Ty const* @var{indicator_ptr} size_t @var{resource_name_size}, Ch const* @var{resource_name}, size_t @var{offset}, size_t @var{limit})}
 +Returns a pointer to backing storage suitably-sized to access @var{out_size}
 +elements of a contiguous sequence of @var{const T} objects. The signature
 +above is not exact and the builtin does not behave exactly as a function
@@ -3021,7 +3113,7 @@ index 7de7eab3aa5..375fe211553 100644
  
  @node Target Builtins
  @section Built-in Functions Specific to Particular Target Machines
-@@ -25618,7 +25708,7 @@ The @code{scalar_cmp_exp_gt}, @code{scalar_cmp_exp_lt},
+@@ -25618,7 +25702,7 @@ The @code{scalar_cmp_exp_gt}, @code{scalar_cmp_exp_lt},
  functions return a non-zero value if @code{arg1} is greater than, less
  than, equal to, or not comparable to @code{arg2} respectively.  The
  arguments are not comparable if one or the other equals NaN (not a
@@ -3030,7 +3122,7 @@ index 7de7eab3aa5..375fe211553 100644
  
  The @code{scalar_test_data_class} built-in function returns 1
  if any of the condition tests enabled by the value of the
-@@ -30372,7 +30462,7 @@ v2si __builtin_ia32_pswapdsi (v2si);
+@@ -30384,7 +30468,7 @@ v2si __builtin_ia32_pswapdsi (v2si);
  
  The following built-in functions are available when @option{-mrtm} is used
  They are used for restricted transactional memory. These are the internal
@@ -3039,7 +3131,7 @@ index 7de7eab3aa5..375fe211553 100644
  @ref{x86 transactional memory intrinsics} should be used instead.
  
  @smallexample
-@@ -30431,7 +30521,7 @@ void __builtin_ia32_clrssbsy(void *);
+@@ -30443,7 +30527,7 @@ void __builtin_ia32_clrssbsy(void *);
  These hardware transactional memory intrinsics for x86 allow you to use
  memory transactions with RTM (Restricted Transactional Memory).
  This support is enabled with the @option{-mrtm} option.
@@ -3048,7 +3140,7 @@ index 7de7eab3aa5..375fe211553 100644
  @ref{x86 specific memory model extensions for transactional memory} instead.
  
  A memory transaction commits all changes to memory in an atomic way,
-@@ -30442,10 +30532,10 @@ Generally there is no guarantee that a memory transaction ever succeeds
+@@ -30454,10 +30538,10 @@ Generally there is no guarantee that a memory transaction ever succeeds
  and suitable fallback code always needs to be supplied.
  
  @deftypefn {RTM Function} {unsigned} _xbegin ()
@@ -3062,7 +3154,7 @@ index 7de7eab3aa5..375fe211553 100644
  
  If the transaction aborts, all side effects
  are undone and an abort code encoded as a bit mask is returned.
-@@ -30493,7 +30583,7 @@ Return a nonzero value if a transaction is currently active, otherwise 0.
+@@ -30505,7 +30589,7 @@ Return a nonzero value if a transaction is currently active, otherwise 0.
  
  @deftypefn {RTM Function} {void} _xabort (status)
  Abort the current transaction. When no transaction is active this is a no-op.
@@ -3071,7 +3163,7 @@ index 7de7eab3aa5..375fe211553 100644
  value from @code{_xbegin}.
  @end deftypefn
  
-@@ -30507,18 +30597,18 @@ int n_tries, max_tries;
+@@ -30519,18 +30603,18 @@ int n_tries, max_tries;
  unsigned status = _XABORT_EXPLICIT;
  ...
  
@@ -3094,7 +3186,7 @@ index 7de7eab3aa5..375fe211553 100644
    @{
      ... non-transactional fallback path...
    @}
-@@ -30534,7 +30624,7 @@ must synchronize together to ensure consistency.
+@@ -30546,7 +30630,7 @@ must synchronize together to ensure consistency.
  @deftypefn {CET Function} {ret_type} _get_ssp (void)
  Get the current value of shadow stack pointer if shadow stack support
  from Intel CET is enabled in the hardware or @code{0} otherwise.
@@ -3103,7 +3195,7 @@ index 7de7eab3aa5..375fe211553 100644
  and @code{unsigned int} for 32-bit targets.
  @end deftypefn
  
-@@ -31412,7 +31502,7 @@ Function Multiversioning} for more details.
+@@ -31424,7 +31508,7 @@ Function Multiversioning} for more details.
  @section Type Traits
  
  The C++ front end implements syntactic extensions that allow
@@ -3112,6 +3204,29 @@ index 7de7eab3aa5..375fe211553 100644
  various characteristics of a type (or of a
  pair of types).
  
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 756af474310..777c4b424f1 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -2649,6 +2649,18 @@ change in incompatible ways in future releases.
+ GNU dialect of @option{-std=c++2c}.  Support is highly experimental,
+ and will almost certainly change in incompatible ways in future
+ releases.
++
++@item c++2d
++@itemx c++29
++The next revision of the ISO C++ standard, planned for
++2029. Support is highly experimental, and will almost certainly
++change in incompatible ways in future releases.
++
++@item gnu++2d
++@itemx gnu++29
++GNU dialect of @option{-std=c++2d}. Support is highly experimental,
++and will almost certainly change in incompatible ways in future
++releases.
+ @end table
+ 
+ @opindex aux-info
 diff --git a/gcc/incpath.cc b/gcc/incpath.cc
 index 74ae8ba1918..617861b923c 100644
 --- a/gcc/incpath.cc
@@ -3353,6 +3468,551 @@ index 974022e5b2a..9edb17cf465 100644
  struct target_c_incpath_s {
    /* Do extra includes processing.  STDINC is false iff -nostdinc was given.  */
    void (*extra_pre_includes) (const char *, const char *, int);
+diff --git a/gcc/testsuite/c-c++-common/cpp/embed-dir/resources/a/b/empty b/gcc/testsuite/c-c++-common/cpp/embed-dir/resources/a/b/empty
+new file mode 100644
+index 00000000000..e69de29bb2d
+diff --git a/gcc/testsuite/c-c++-common/cpp/embed-dir/resources/art.bin b/gcc/testsuite/c-c++-common/cpp/embed-dir/resources/art.bin
+new file mode 100644
+index 00000000000..643caf6a0d9
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/cpp/embed-dir/resources/art.bin
+@@ -0,0 +1 @@
++                                         @#=+@@                 @@%%@@                              R                  @======%@            @@%%%%%%%@                                                 %=*%%==============*##%%%%%%%@                                                  %=%%%*============*###%%%%%@                              A                     @=%+=========+****##%%%%%%                                                       *==+----===+-----+#%%%%@                                                      @==-----====--%%*---=%%%@                               C                      +=*-#%@@%-===%%@@%%%--%%%@                                                     #*-%%%%%*-===-%@%%%#%#**%@                                                     @+**%%%=--**--+*%@@@@#**%%                              C                       *+=+-=--@%%%#-=****++***%@                                                     @***+==--===---#+*******%%@                                                    @*==**%%%#%%%%**+*******%%@                                                    @+===+**%%#**************%%@                                                  %========*****************%%%@                                               @======*********************#%%@                                              *========********************##%%@                                            +=========*******************###%%@                                         @===========+******************#####%@                                       #=============+****************#######%@                                     @+==============****************########%%                                    %================+**************##########%@                                  @@=================*************###########%%@                                  @=================*************###########%%@                                  +==================************############%@                                @@@===================+**********############%%                                  *================+===**********###########%@@                                 @+================*+==+*********##########%%@@                                  @==============%%*+===********###########%%@                                   @+=============%%**+==+*******#%#%#######%@                                     %=============%%%#**==*******#%%%#######@                      @@@  @ @@@      @=============*#%###*+*******#%%%%%#####@           @@@#-----##%%%%-----%%%%----++============#######******##%%%%%%####@        @-%%%%%%-----*%%%%%----*%%%-===#*======+#====@########*=+*###%%%%@@###@      @%=--=%%%%%-----%%%%%+----%%%#===*%====%%%%%%%#@@#########=####%@@@ @###@     @%%%%--%%%%%-----%%%%------%%%%==--%%====#%%@@@@@@@%@%#####@%####@@@@#####@    @@%%#---%%%*====@@@*+*####@@@%=--=%%%%+=+###@@@%%@@@@@@@@@@@######@@@######@                                        @@@@@@                 @#######@@########@                                                            @#########@@#@@##@                                                              @########@   🦝
+diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed-errors1.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed-errors1.C
+new file mode 100644
+index 00000000000..5a24e76f5ab
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/builtin-std-embed-errors1.C
+@@ -0,0 +1,47 @@
++// { dg-do compile { target c++23 } }
++// { dg-options "--embed-dir=${srcdir}/c-c++-common/cpp/embed-dir" }
++
++namespace std
++{
++  enum byte : unsigned char {};
++  typedef decltype(sizeof(0)) size_t;
++}
++
++#depend __FILE__
++// { dg-warning "'#depend' is a C++29 extension" .-1 }
++
++consteval void f ()
++{
++
++  unsigned int locus = 0;
++  int status = 0;
++  std::size_t size = 0;
++  const char* ptrc = 0;
++  std::size_t offset = 0;
++  std::size_t limit = 0;
++  struct illegal_t { unsigned char c; } illegal = {};
++
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, offset, limit, illegal);
++  // { dg-error "too many arguments to function '__builtin_std_embed'"" .-1 }
++  (void)__builtin_std_embed(locus, status, size);
++  // { dg-error "too few arguments to function '__builtin_std_embed'" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc);
++  // { dg-error "too few arguments to function '__builtin_std_embed'" .-1 }
++  (void)__builtin_std_embed(illegal, status, size, ptrc, 0, ptrc, offset, limit);
++  // { dg-error "cannot convert 'f()::illegal_t' to 'unsigned int'" .-1 }
++  (void)__builtin_std_embed(locus, illegal, size, ptrc, 0, ptrc, offset, limit);
++  // { dg-error "invalid initialization of reference of type 'int&' from expression of type 'f()::illegal_t'" .-1 }
++  // size_t might change between platforms: fix the type in-place
++  (void)__builtin_std_embed(locus, status, illegal, ptrc, 0, ptrc, offset, limit);
++  // { dg-error "invalid initialization of reference of type " .-1 }
++  (void)__builtin_std_embed(locus, status, size, illegal, 0, ptrc, offset, limit);
++  // { dg-error "argument 4 to '__builtin_std_embed' must be a pointer to a 'const' integer or enumeration type of sizeof and alignof equal to 1" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, illegal, ptrc, offset, limit);
++  // { dg-error "argument 5 to function '__builtin_std_embed' must be an integer type" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, illegal, offset, limit);
++  // { dg-error "argument 6 to function '__builtin_std_embed' must be a pointer to 'char', 'wchar_t',  or 'char8_t'" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, illegal, limit);
++  // { dg-error "argument 7 to function '__builtin_std_embed' must be an integral type" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, offset, illegal);
++  // { dg-error "argument 8 to function '__builtin_std_embed' must be an integral type" .-1 }
++}
+diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed1.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed1.C
+new file mode 100644
+index 00000000000..ea5977841b4
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/builtin-std-embed1.C
+@@ -0,0 +1,70 @@
++// { dg-do compile { target c++23 } }
++// { dg-options "--embed-dir=${srcdir}/c-c++-common/cpp/embed-dir" }
++
++#depend __FILE__
++
++namespace std {
++  enum class byte : unsigned char {};
++}
++
++template <typename I0, typename S0, typename I1, typename S1>
++constexpr bool byte_equal (I0 first0, S0 last0, I1 first1, S1 last1) {
++  for (;first0 != last0 || first1 != last1; ++first0, ++first1) {
++    if ((unsigned char)*first0 != (unsigned char)*first1) {
++      return false;
++    }
++  }
++  return first0 == last0 && first1 == last1;
++}
++
++inline constexpr decltype(sizeof(0)) sentinel_size = 44203;
++template <typename T>
++inline constexpr T sentinel_object = {};
++template <typename T>
++inline constexpr const T* sentinel_address = &sentinel_object<T>;
++
++template <typename T>
++struct inspect {
++  const T* ptr = sentinel_address<T>;
++  decltype(sizeof(0)) size = sentinel_size;
++  int status = -1;
++};
++
++enum : int {
++  not_found,
++  found,
++  no_depend,
++  found_empty,
++};
++
++template <typename T, typename C, decltype(sizeof(0)) N>
++consteval inspect<T> local_lookup_core (const C (&name)[N]) {
++  inspect<T> result;
++  result.ptr = __builtin_std_embed(0b000, result.status, result.size, result.ptr, (N)-1, name, 0);
++  return result;
++}
++
++consteval bool local_file () {
++  static constexpr const unsigned char file[] = {
++#embed __FILE__
++  };
++  static constexpr const decltype(sizeof(0)) file_size = sizeof(file);
++  constexpr auto v0 = local_lookup_core<unsigned char>(__FILE__);
++  static_assert(v0.status == found);
++  static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, &file[0], &file[0] + file_size));
++  static_assert(v0.size == file_size);
++
++  constexpr auto v1 = local_lookup_core<char>(__FILE__);
++  static_assert(v1.status == found);
++  static_assert(byte_equal(v1.ptr, v1.ptr + v1.size, &file[0], &file[0] + file_size));
++  static_assert(v1.size == file_size);
++
++  constexpr auto v2 = local_lookup_core<std::byte>(__FILE__);
++  static_assert(v2.status == found);
++  static_assert(byte_equal(v2.ptr, v2.ptr + v2.size, &file[0], &file[0] + file_size));
++  static_assert(v2.size == file_size);
++
++  return true;
++}
++
++static_assert(local_file());
+diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed2.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed2.C
+new file mode 100644
+index 00000000000..523f7ec1a06
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/builtin-std-embed2.C
+@@ -0,0 +1,196 @@
++// { dg-do compile { target c++23 } }
++// { dg-options "--embed-dir=${srcdir}/c-c++-common/cpp/embed-dir" }
++
++#depend "first/*"
++// { dg-warning "'#depend' is a C++2d extension" .-1 }
++
++namespace std {
++  enum class byte : unsigned char {};
++  typedef decltype(sizeof(0)) size_t;
++}
++
++// 79 x 40
++constexpr const unsigned char v_correct[] = 
++// clang-format off
++u8"                                         @#=+@@                 @@%%@@         "
++u8"                     R                  @======%@            @@%%%%%%%@        "
++u8"                                         %=*%%==============*##%%%%%%%@        "
++u8"                                          %=%%%*============*###%%%%%@         "
++u8"                     A                     @=%+=========+****##%%%%%%          "
++u8"                                             *==+----===+-----+#%%%%@          "
++u8"                                            @==-----====--%%*---=%%%@          "
++u8"                     C                      +=*-#%@@%-===%%@@%%%--%%%@         "
++u8"                                            #*-%%%%%*-===-%@%%%#%#**%@         "
++u8"                                            @+**%%%=--**--+*%@@@@#**%%         "
++u8"                     C                       *+=+-=--@%%%#-=****++***%@        "
++u8"                                             @***+==--===---#+*******%%@       "
++u8"                                             @*==**%%%#%%%%**+*******%%@       "
++u8"                                             @+===+**%%#**************%%@      "
++u8"                                            %========*****************%%%@     "
++u8"                                          @======*********************#%%@     "
++u8"                                         *========********************##%%@    "
++u8"                                        +=========*******************###%%@    "
++u8"                                     @===========+******************#####%@    "
++u8"                                   #=============+****************#######%@    "
++u8"                                 @+==============****************########%%    "
++u8"                                %================+**************##########%@   "
++u8"                               @@=================*************###########%%@  "
++u8"                                @=================*************###########%%@  "
++u8"                                +==================************############%@  "
++u8"                              @@@===================+**********############%%  "
++u8"                                *================+===**********###########%@@  "
++u8"                               @+================*+==+*********##########%%@@  "
++u8"                                @==============%%*+===********###########%%@   "
++u8"                                @+=============%%**+==+*******#%#%#######%@    "
++u8"                                 %=============%%%#**==*******#%%%#######@     "
++u8"                 @@@  @ @@@      @=============*#%###*+*******#%%%%%#####@     "
++u8"      @@@#-----##%%%%-----%%%%----++============#######******##%%%%%%####@     "
++u8"   @-%%%%%%-----*%%%%%----*%%%-===#*======+#====@########*=+*###%%%%@@###@     "
++u8" @%=--=%%%%%-----%%%%%+----%%%#===*%====%%%%%%%#@@#########=####%@@@ @###@     "
++u8"@%%%%--%%%%%-----%%%%------%%%%==--%%====#%%@@@@@@@%@%#####@%####@@@@#####@    "
++u8"@@%%#---%%%*====@@@*+*####@@@%=--=%%%%+=+###@@@%%@@@@@@@@@@@######@@@######@   "
++u8"                                     @@@@@@                 @#######@@########@"
++u8"                                                            @#########@@#@@##@ "
++u8"                                                             @########@   \xF0\x9F\xA6\x9D";
++// clang-format on
++constexpr const std::size_t v_correct_size = sizeof(v_correct) - 1;
++constexpr const unsigned char* v_correct_end = v_correct + v_correct_size;
++
++template <typename I0, typename S0, typename I1, typename S1>
++constexpr bool byte_equal (I0 first0, S0 last0, I1 first1, S1 last1) {
++  for (;first0 != last0 || first1 != last1; ++first0, ++first1) {
++    if ((unsigned char)*first0 != (unsigned char)*first1) {
++      return false;
++    }
++  }
++  return first0 == last0 && first1 == last1;
++}
++
++inline constexpr std::size_t size_max = (std::size_t)0xFFFFFFFFFFFFFFFFull;
++inline constexpr std::size_t sentinel_size = 44203zu;
++template <typename T>
++inline constexpr T sentinel_object = {};
++template <typename T>
++inline constexpr const T* sentinel_address = &sentinel_object<T>;
++
++template <typename T>
++struct inspect {
++  const T* ptr = sentinel_address<T>;
++  std::size_t size = sentinel_size;
++  int status = -1;
++};
++
++enum : int {
++  not_found,
++  found,
++  no_depend,
++  found_empty
++};
++
++template <typename T, typename C, std::size_t N>
++consteval inspect<T> non_local_lookup_core (const C (&name)[N],
++                                            std::size_t offset = 0,
++                                            std::size_t limit = size_max) {
++  inspect<T> result;
++  if (limit == size_max)
++    result.ptr = __builtin_std_embed(0b000, result.status, result.size,
++                                     result.ptr, N-1, name, offset);
++  else
++    result.ptr = __builtin_std_embed(0b000, result.status, result.size,
++                                     result.ptr, N-1, name, offset, limit);
++  return result;
++}
++
++consteval bool art () {
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/racc.bin");
++  static_assert(v0.status == found);
++  static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, &v_correct[0], v_correct_end));
++  static_assert(v0.size == v_correct_size);
++  constexpr auto v1 = non_local_lookup_core<unsigned char>(L"resources/racc.bin");
++  static_assert(v1.status == found);
++  static_assert(byte_equal(v1.ptr, v1.ptr + v1.size, &v_correct[0], v_correct_end));
++  static_assert(v1.size == v_correct_size);
++  constexpr auto v2 = non_local_lookup_core<unsigned char>(u8"resources/racc.bin");
++  static_assert(v2.status == found);
++  static_assert(byte_equal(v2.ptr, v2.ptr + v2.size, &v_correct[0], v_correct_end));
++  static_assert(v2.size == v_correct_size);
++
++  constexpr auto v3 = non_local_lookup_core<char>("resources/racc.bin");
++  static_assert(v3.status == found);
++  static_assert(byte_equal(v3.ptr, v3.ptr + v3.size, &v_correct[0], v_correct_end));
++  static_assert(v3.size == v_correct_size);
++  constexpr auto v4 = non_local_lookup_core<char>(L"resources/racc.bin");
++  static_assert(v4.status == found);
++  static_assert(byte_equal(v4.ptr, v4.ptr + v4.size, &v_correct[0], v_correct_end));
++  static_assert(v4.size == v_correct_size);
++  constexpr auto v5 = non_local_lookup_core<char>(u8"resources/racc.bin");
++  static_assert(v5.status == found);
++  static_assert(byte_equal(v5.ptr, v5.ptr + v5.size, &v_correct[0], v_correct_end));
++  static_assert(v5.size == v_correct_size);
++
++  constexpr auto v6 = non_local_lookup_core<std::byte>("resources/racc.bin");
++  static_assert(v6.status == found);
++  static_assert(byte_equal(v6.ptr, v6.ptr + v6.size, &v_correct[0], v_correct_end));
++  static_assert(v6.size == v_correct_size);
++  constexpr auto v7 = non_local_lookup_core<std::byte>(L"resources/racc.bin");
++  static_assert(v7.status == found);
++  static_assert(byte_equal(v7.ptr, v7.ptr + v7.size, &v_correct[0], v_correct_end));
++  static_assert(v7.size == v_correct_size);
++  constexpr auto v8 = non_local_lookup_core<std::byte>(u8"resources/racc.bin");
++  static_assert(v8.status == found);
++  static_assert(byte_equal(v8.ptr, v8.ptr + v8.size, &v_correct[0], v_correct_end));
++  static_assert(v8.size == v_correct_size);
++
++  return true;
++}
++
++consteval bool cannot_depend_on () {
++  // test that #depend "resources/*" pattern deos not allow something
++  // that is more "deeply" nested
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/a/b/empty");
++  static_assert(v0.status == no_depend);
++  static_assert(v0.ptr == nullptr);
++  static_assert(v0.size == sentinel_size);
++  
++  return true;
++}
++
++consteval bool offset () {
++  constexpr std::size_t R_offset = 100;
++  constexpr std::size_t A_offset = 237;
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/racc.bin", R_offset);
++  static_assert(v0.status == found);
++  static_assert(v0.ptr[0] == (unsigned char)'R');
++  static_assert(v0.ptr[A_offset] == (unsigned char)'A');
++  static_assert(v0.size == v_correct_size - R_offset);
++
++  constexpr auto v1 = non_local_lookup_core<unsigned char>("resources/racc.bin", size_max);
++  static_assert(v1.status == found_empty);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == 0);
++
++  return true;
++}
++
++consteval bool limit () {
++  constexpr std::size_t line_offset = 553;
++  constexpr std::size_t line_limit = 79;
++  constexpr std::size_t C_offset = 21;
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/racc.bin", line_offset, line_limit);
++  static_assert(v0.status == found);
++  static_assert(v0.ptr[C_offset] == (unsigned char)'C');
++  static_assert(v0.size == line_limit);
++  static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, v_correct + line_offset, v_correct + line_offset + line_limit));
++
++  constexpr auto v1 = non_local_lookup_core<unsigned char>("resources/racc.bin", 0, 0);
++  static_assert(v1.status == found_empty);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == 0);
++
++  return true;
++}
++
++static_assert(art());
++static_assert(cannot_depend_on());
++static_assert(offset());
++static_assert(limit());
+diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed3.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed3.C
+new file mode 100644
+index 00000000000..a88cd38a709
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/builtin-std-embed3.C
+@@ -0,0 +1,198 @@
++// { dg-do compile { target c++23 } }
++// { dg-options "--embed-dir=${srcdir}/c-c++-common/cpp/embed-dir" }
++
++#depend "resources/**"
++// { dg-warning "'#depend' is a C++2d extension" .-1 }
++
++namespace std
++{
++  enum class byte : unsigned char {};
++}
++
++inline constexpr decltype(sizeof(0)) sentinel_size = 44203zu;
++template <typename T>
++inline constexpr T sentinel_object = {};
++template <typename T>
++inline constexpr const T* sentinel_address = &sentinel_object<T>;
++
++template <typename T>
++struct inspect
++{
++  const T* ptr = sentinel_address<T>;
++  decltype(sizeof(0)) size = sentinel_size;
++  int status = -1;
++};
++
++enum : int
++{
++  not_found,
++  found,
++  no_depend,
++  found_empty
++};
++
++template <typename T, typename C>
++consteval inspect<T>
++does_not_exist_core ()
++{
++  static constexpr const C name[1] = { C(0) };
++  inspect<T> result = {};
++  result.ptr = __builtin_std_embed(0b000, result.status, result.size,
++                                   result.ptr, 0, &name[0], 0);
++  return result;
++}
++
++template <typename T, typename C, decltype(sizeof(0)) N>
++consteval inspect<T> non_local_lookup_core (const C (&name)[N])
++{
++  inspect<T> result = {};
++  result.ptr = __builtin_std_embed(0b000, result.status, result.size,
++                                   result.ptr, (N)-1, &name[0], 0);
++  return result;
++}
++
++template <typename T, typename C, decltype(sizeof(0)) N>
++consteval inspect<T>
++local_lookup_core (const C (&name)[N])
++  {
++  inspect<T> result = {};
++  result.ptr = __builtin_std_embed(0b001, result.status, result.size,
++                                   result.ptr, (N)-1, &name[0], 0);
++  return result;
++}
++
++consteval bool does_not_exist ()
++{
++  constexpr auto v0 = does_not_exist_core<unsigned char, char>();
++  static_assert(v0.status == not_found);
++  static_assert(v0.ptr == nullptr);
++  static_assert(v0.size == sentinel_size);
++  constexpr auto v1 = does_not_exist_core<char, char>();
++  static_assert(v1.status == not_found);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == sentinel_size);
++  constexpr auto v2 = does_not_exist_core<std::byte, char>();
++  static_assert(v2.status == not_found);
++  static_assert(v2.ptr == nullptr);
++  static_assert(v2.size == sentinel_size);
++
++  constexpr auto v3 = does_not_exist_core<unsigned char, wchar_t>();
++  static_assert(v3.status == not_found);
++  static_assert(v3.ptr == nullptr);
++  static_assert(v3.size == sentinel_size);
++  constexpr auto v4 = does_not_exist_core<char, wchar_t>();
++  static_assert(v4.status == not_found);
++  static_assert(v4.ptr == nullptr);
++  static_assert(v4.size == sentinel_size);
++  constexpr auto v5 = does_not_exist_core<std::byte, wchar_t>();
++  static_assert(v5.status == not_found);
++  static_assert(v5.ptr == nullptr);
++  static_assert(v5.size == sentinel_size);
++
++  constexpr auto v6 = does_not_exist_core<unsigned char, char8_t>();
++  static_assert(v6.status == not_found);
++  static_assert(v6.ptr == nullptr);
++  static_assert(v6.size == sentinel_size);
++  constexpr auto v7 = does_not_exist_core<char, char8_t>();
++  static_assert(v7.status == not_found);
++  static_assert(v7.ptr == nullptr);
++  static_assert(v7.size == sentinel_size);
++  constexpr auto v8 = does_not_exist_core<std::byte, char8_t>();
++  static_assert(v8.status == not_found);
++  static_assert(v8.ptr == nullptr);
++  static_assert(v8.size == sentinel_size);
++  
++  return true;
++}
++
++consteval bool not_depended_on ()
++{
++  constexpr auto v0 = local_lookup_core<unsigned char>("consteval-builtin-std-embed.cpp");
++  static_assert(v0.status == no_depend);
++  static_assert(v0.ptr == nullptr);
++  static_assert(v0.size == sentinel_size);
++  constexpr auto v1 = local_lookup_core<unsigned char>(L"consteval-builtin-std-embed.cpp");
++  static_assert(v1.status == no_depend);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == sentinel_size);
++  constexpr auto v2 = local_lookup_core<unsigned char>(u8"consteval-builtin-std-embed.cpp");
++  static_assert(v2.status == no_depend);
++  static_assert(v2.ptr == nullptr);
++  static_assert(v2.size == sentinel_size);
++
++  constexpr auto v3 = local_lookup_core<char>("consteval-builtin-std-embed.cpp");
++  static_assert(v3.status == no_depend);
++  static_assert(v3.ptr == nullptr);
++  static_assert(v3.size == sentinel_size);
++  constexpr auto v4 = local_lookup_core<char>(L"consteval-builtin-std-embed.cpp");
++  static_assert(v4.status == no_depend);
++  static_assert(v4.ptr == nullptr);
++  static_assert(v4.size == sentinel_size);
++  constexpr auto v5 = local_lookup_core<char>(u8"consteval-builtin-std-embed.cpp");
++  static_assert(v5.status == no_depend);
++  static_assert(v5.ptr == nullptr);
++  static_assert(v5.size == sentinel_size);
++
++  constexpr auto v6 = local_lookup_core<std::byte>("consteval-builtin-std-embed.cpp");
++  static_assert(v6.status == no_depend);
++  static_assert(v6.ptr == nullptr);
++  static_assert(v6.size == sentinel_size);
++  constexpr auto v7 = local_lookup_core<std::byte>(L"consteval-builtin-std-embed.cpp");
++  static_assert(v7.status == no_depend);
++  static_assert(v7.ptr == nullptr);
++  static_assert(v7.size == sentinel_size);
++  constexpr auto v8 = local_lookup_core<std::byte>(u8"consteval-builtin-std-embed.cpp");
++  static_assert(v8.status == no_depend);
++  static_assert(v8.ptr == nullptr);
++  static_assert(v8.size == sentinel_size);
++
++  return true;
++}
++
++consteval bool empty ()
++{
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/a/b/empty");
++  static_assert(v0.status == found_empty);
++  static_assert(v0.ptr == nullptr);
++  static_assert(v0.size == 0);
++  constexpr auto v1 = non_local_lookup_core<unsigned char>(L"resources/a/b/empty");
++  static_assert(v1.status == found_empty);
++  static_assert(v1.ptr == nullptr);
++  static_assert(v1.size == 0);
++  constexpr auto v2 = non_local_lookup_core<unsigned char>(u8"resources/a/b/empty");
++  static_assert(v2.status == found_empty);
++  static_assert(v2.ptr == nullptr);
++  static_assert(v2.size == 0);
++
++  constexpr auto v3 = non_local_lookup_core<char>("resources/a/b/empty");
++  static_assert(v3.status == found_empty);
++  static_assert(v3.ptr == nullptr);
++  static_assert(v3.size == 0);
++  constexpr auto v4 = non_local_lookup_core<char>(L"resources/a/b/empty");
++  static_assert(v4.status == found_empty);
++  static_assert(v4.ptr == nullptr);
++  static_assert(v4.size == 0);
++  constexpr auto v5 = non_local_lookup_core<char>(u8"resources/a/b/empty");
++  static_assert(v5.status == found_empty);
++  static_assert(v5.ptr == nullptr);
++  static_assert(v5.size == 0);
++
++  constexpr auto v6 = non_local_lookup_core<std::byte>("resources/a/b/empty");
++  static_assert(v6.status == found_empty);
++  static_assert(v6.ptr == nullptr);
++  static_assert(v6.size == 0);
++  constexpr auto v7 = non_local_lookup_core<std::byte>(L"resources/a/b/empty");
++  static_assert(v7.status == found_empty);
++  static_assert(v7.ptr == nullptr);
++  static_assert(v7.size == 0);
++  constexpr auto v8 = non_local_lookup_core<std::byte>(u8"resources/a/b/empty");
++  static_assert(v8.status == found_empty);
++  static_assert(v8.ptr == nullptr);
++  static_assert(v8.size == 0);
++
++  return true;
++}
++
++static_assert(does_not_exist());
++static_assert(not_depended_on());
++static_assert(empty());
 diff --git a/gcc/tree-core.h b/gcc/tree-core.h
 index 07e9318f5e8..86c2e55576d 100644
 --- a/gcc/tree-core.h
@@ -3378,7 +4038,7 @@ index 07e9318f5e8..86c2e55576d 100644
 +
  #endif  // GCC_TREE_CORE_H
 diff --git a/gcc/tree.cc b/gcc/tree.cc
-index 2868cb0867d..b69c7b182c3 100644
+index 8479ffab584..fdebf20cef5 100644
 --- a/gcc/tree.cc
 +++ b/gcc/tree.cc
 @@ -794,7 +794,7 @@ init_ttree (void)
@@ -3727,10 +4387,10 @@ index 2868cb0867d..b69c7b182c3 100644
  
  namespace selftest {
 diff --git a/gcc/tree.h b/gcc/tree.h
-index f8b2d718b7e..41a29d2dfd5 100644
+index 3b012d0fd6a..db2b84ebf33 100644
 --- a/gcc/tree.h
 +++ b/gcc/tree.h
-@@ -5171,6 +5171,18 @@ strip_pointer_types (const_tree type)
+@@ -5178,6 +5178,18 @@ strip_pointer_types (const_tree type)
    return type;
  }
  
@@ -3936,18 +4596,34 @@ index 0fe3dbd0957..2be87485a68 100644
  
  Copying and distribution of this file, with or without modification,
 diff --git a/libcpp/directives.cc b/libcpp/directives.cc
-index 9accc3798e0..7812b17d347 100644
+index 9accc3798e0..1902f952917 100644
 --- a/libcpp/directives.cc
 +++ b/libcpp/directives.cc
-@@ -165,6 +165,7 @@ static void cpp_pop_definition (cpp_reader *, def_pragma_macro *,
+@@ -62,10 +62,11 @@ struct pragma_entry
+    come from traditional (K&R) C.  STDC89 directives come from the
+    1989 C standard.  STDC23 directives come from the C23 standard.  EXTENSION
+    directives are extensions.  */
+-#define KANDR		0
+-#define STDC89		1
+-#define STDC23		2
+-#define EXTENSION	3
++#define KANDR			0
++#define STDC89			1
++#define STDC23			2
++#define STDCXX29		3
++#define EXTENSION		8
+ 
+ /* Values for the flags field of struct directive.  COND indicates a
+    conditional; IF_COND an opening conditional.  INCL means to treat
+@@ -165,6 +166,7 @@ static void cpp_pop_definition (cpp_reader *, def_pragma_macro *,
    D(pragma,	T_PRAGMA,	STDC89,    IN_I)			\
    D(warning,	T_WARNING,	STDC23,    0)				\
    D(embed,	T_EMBED,	STDC23,    IN_I | INCL | EXPAND)	\
-+  D(depend,	T_DEPEND,	EXTENSION,  IN_I | INCL)		\
++  D(depend,	T_DEPEND,	STDCXX29,  IN_I | INCL)		\
    D(include_next, T_INCLUDE_NEXT, EXTENSION, INCL | EXPAND)		\
    D(ident,	T_IDENT,	EXTENSION, IN_I)			\
    D(import,	T_IMPORT,	EXTENSION, INCL | EXPAND)  /* ObjC */	\
-@@ -1443,6 +1444,64 @@ do_embed (cpp_reader *pfile)
+@@ -1443,6 +1445,80 @@ do_embed (cpp_reader *pfile)
    XDELETEVEC (fname);
  }
  
@@ -3968,10 +4644,26 @@ index 9accc3798e0..7812b17d347 100644
 +  if (CPP_OPTION (pfile, traditional))
 +    {
 +      cpp_error (pfile, CPP_DL_ERROR, /* FIXME should be DL_SORRY */
-+		 "%<#depend%> not supported in traditional C");
++		 "%qs not supported in traditional C", "#depend");
 +      skip_rest_of_line (pfile);
 +      goto done;
 +    }
++  else if (!CPP_OPTION (pfile, depend))
++    {
++      if (CPP_PEDANTIC (pfile) && !CPP_OPTION (pfile, depend))
++	{
++	  if (CPP_OPTION (pfile, cplusplus))
++	    cpp_pedwarning (pfile, CPP_W_CXX29_EXTENSIONS,
++			    "%qs before C++29 is a GCC extension",
++			    "#depend");
++	  else
++	    cpp_pedwarning (pfile, CPP_W_PEDANTIC,
++			    "%qs is a GCC extension",
++			    "#depend");
++	}
++    }
++
++
 +
 +  maybe_export = cpp_peek_token (pfile, 0);
 +  if (maybe_export->type == cpp_ttype::CPP_NAME && ustrcmp (maybe_export->val.str.text, UC"export"))
@@ -4012,6 +4704,11 @@ index 9accc3798e0..7812b17d347 100644
  /* Subroutine of do_linemarker.  Read possible flags after file name.
     LAST is the last flag seen; 0 if this is the first flag. Return the
     flag if it is valid, 0 at the end of the directive. Otherwise
+@@ -3382,4 +3458,3 @@ _cpp_bracket_include(cpp_reader *pfile)
+ {
+   return glue_header_name (pfile);
+ }
+-
 diff --git a/libcpp/files.cc b/libcpp/files.cc
 index 9234ead0d23..0a8257012ba 100644
 --- a/libcpp/files.cc
@@ -4508,7 +5205,7 @@ index 9234ead0d23..0a8257012ba 100644
     while the PCH was being built.  The 'entries' field is kept sorted
     in memcmp() order; yes, this means that on little-endian systems,
 diff --git a/libcpp/include/cpplib.h b/libcpp/include/cpplib.h
-index bc0d7714e96..08af99d01a5 100644
+index bc0d7714e96..eed8b8f8f47 100644
 --- a/libcpp/include/cpplib.h
 +++ b/libcpp/include/cpplib.h
 @@ -35,6 +35,7 @@ typedef struct cpp_hashnode cpp_hashnode;
@@ -4519,7 +5216,35 @@ index bc0d7714e96..08af99d01a5 100644
  
  struct _cpp_file;
  
-@@ -779,6 +780,12 @@ enum cpp_warning_reason {
+@@ -183,7 +184,8 @@ enum c_lang {CLK_GNUC89 = 0, CLK_GNUC99, CLK_GNUC11, CLK_GNUC17, CLK_GNUC23,
+ 	     CLK_GNUCXX, CLK_CXX98, CLK_GNUCXX11, CLK_CXX11,
+ 	     CLK_GNUCXX14, CLK_CXX14, CLK_GNUCXX17, CLK_CXX17,
+ 	     CLK_GNUCXX20, CLK_CXX20, CLK_GNUCXX23, CLK_CXX23,
+-	     CLK_GNUCXX26, CLK_CXX26, CLK_ASM};
++	     CLK_GNUCXX26, CLK_CXX26, CLK_GNUCXX29, CLK_CXX29,
++	     CLK_ASM};
+ 
+ /* Payload of a NUMBER, STRING, CHAR or COMMENT token.  */
+ struct GTY(()) cpp_string {
+@@ -578,6 +580,9 @@ struct cpp_options
+   /* Nonzero for the '#embed' directive.  */
+   unsigned char embed;
+ 
++  /* Nonzero for C++29 '#depend' directives.  */
++  unsigned char depend;
++
+   /* Holds the name of the target (execution) character set.  */
+   const char *narrow_charset;
+ 
+@@ -760,6 +765,7 @@ enum cpp_warning_reason {
+   CPP_W_CXX20_EXTENSIONS,
+   CPP_W_CXX23_EXTENSIONS,
+   CPP_W_CXX26_EXTENSIONS,
++  CPP_W_CXX29_EXTENSIONS,
+   CPP_W_EXPANSION_TO_DEFINED,
+   CPP_W_BIDIRECTIONAL,
+   CPP_W_INVALID_UTF8,
+@@ -779,6 +785,12 @@ enum cpp_warning_reason {
     header is otherwise unfound.  */
  typedef const char *(*missing_header_cb)(cpp_reader *, const char *header, cpp_dir **);
  
@@ -4532,7 +5257,7 @@ index bc0d7714e96..08af99d01a5 100644
  /* Call backs to cpplib client.  */
  struct cpp_callbacks
  {
-@@ -794,6 +801,7 @@ struct cpp_callbacks
+@@ -794,6 +806,7 @@ struct cpp_callbacks
    void (*dir_change) (cpp_reader *, const char *);
    void (*include) (cpp_reader *, location_t, const unsigned char *,
  		   const char *, int, const cpp_token **);
@@ -4540,7 +5265,7 @@ index bc0d7714e96..08af99d01a5 100644
    void (*define) (cpp_reader *, location_t, cpp_hashnode *);
    void (*undef) (cpp_reader *, location_t, cpp_hashnode *);
    void (*ident) (cpp_reader *, location_t, const cpp_string *);
-@@ -918,6 +926,45 @@ struct cpp_dir
+@@ -918,6 +931,45 @@ struct cpp_dir
    DEV_T_CPP;
  };
  
@@ -4586,7 +5311,7 @@ index bc0d7714e96..08af99d01a5 100644
  /* The kind of the cpp_macro.  */
  enum cpp_macro_kind {
    cmk_macro,	/* An ISO macro (token expansion).  */
-@@ -1173,6 +1220,13 @@ extern cpp_callbacks *cpp_get_callbacks (cpp_reader *) ATTRIBUTE_PURE;
+@@ -1173,6 +1225,13 @@ extern cpp_callbacks *cpp_get_callbacks (cpp_reader *) ATTRIBUTE_PURE;
  extern void cpp_set_callbacks (cpp_reader *, cpp_callbacks *);
  extern class mkdeps *cpp_get_deps (cpp_reader *) ATTRIBUTE_PURE;
  
@@ -4600,7 +5325,7 @@ index bc0d7714e96..08af99d01a5 100644
  extern const char *cpp_probe_header_unit (cpp_reader *, const char *file,
  					  bool angle_p,  location_t);
  
-@@ -1578,6 +1632,13 @@ extern cpp_buffer *cpp_get_buffer (cpp_reader *);
+@@ -1578,6 +1637,13 @@ extern cpp_buffer *cpp_get_buffer (cpp_reader *);
  extern struct _cpp_file *cpp_get_file (cpp_buffer *);
  extern cpp_buffer *cpp_get_prev (cpp_buffer *);
  extern void cpp_clear_file_cache (cpp_reader *);
@@ -4615,10 +5340,91 @@ index bc0d7714e96..08af99d01a5 100644
  /* cpp_get_converted_source returns the contents of the given file, as it exists
     after cpplib has read it and converted it from the input charset to the
 diff --git a/libcpp/init.cc b/libcpp/init.cc
-index a480d1d4a26..9190a0ee728 100644
+index a480d1d4a26..0cb4029eb7f 100644
 --- a/libcpp/init.cc
 +++ b/libcpp/init.cc
-@@ -382,6 +382,7 @@ cpp_destroy (cpp_reader *pfile)
+@@ -114,6 +114,7 @@ struct lang_flags
+   unsigned int embed : 1;
+   unsigned int imaginary_constants : 1;
+   unsigned int low_ucns : 1;
++  unsigned int depend : 1;
+ };
+ 
+ static const struct lang_flags lang_defaults[] = {
+@@ -124,34 +125,36 @@ static const struct lang_flags lang_defaults[] = {
+ 		   c c n x c d s i l l l c s r l o o d l d d l d t f b m u
+ 		   9 + u i 1 i t g i i i s e i i p p f i e i i u a a e a c
+ 		   9 + m d 1 d d r t t t t p g t t e p t f r m c l l d g n */
+-  /* GNUC89   */ { 0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* GNUC99   */ { 1,0,1,1,0,0,0,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* GNUC11   */ { 1,0,1,1,1,0,0,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* GNUC17   */ { 1,0,1,1,1,0,0,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* GNUC23   */ { 1,0,1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,1,0,1,1,0,0,0,1,1,0,1 },
+-  /* GNUC2Y   */ { 1,0,1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,1 },
+-  /* STDC89   */ { 0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* STDC94   */ { 0,0,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* STDC99   */ { 1,0,1,1,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* STDC11   */ { 1,0,1,1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* STDC17   */ { 1,0,1,1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
+-  /* STDC23   */ { 1,0,1,1,1,1,1,1,1,0,0,1,1,0,1,1,1,1,0,1,1,0,0,0,1,1,0,1 },
+-  /* STDC2Y   */ { 1,0,1,1,1,1,1,1,1,0,0,1,1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,1 },
+-  /* GNUCXX   */ { 0,1,1,1,0,1,0,1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* CXX98    */ { 0,1,0,1,0,1,1,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* GNUCXX11 */ { 1,1,1,1,1,1,0,1,1,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* CXX11    */ { 1,1,0,1,1,1,1,1,1,1,1,0,0,1,0,0,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* GNUCXX14 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* CXX14    */ { 1,1,0,1,1,1,1,1,1,1,1,1,1,1,0,0,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* GNUCXX17 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* CXX17    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* GNUCXX20 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* CXX20    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,0,0,0,0,0,0,1,0,0,1 },
+-  /* GNUCXX23 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,0,1 },
+-  /* CXX23    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,0,1 },
+-  /* GNUCXX26 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,0,1 },
+-  /* CXX26    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,0,1 },
+-  /* ASM      */ { 0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 }
++  /* GNUC89   */ { 0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* GNUC99   */ { 1,0,1,1,0,0,0,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* GNUC11   */ { 1,0,1,1,1,0,0,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* GNUC17   */ { 1,0,1,1,1,0,0,1,1,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* GNUC23   */ { 1,0,1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,1,0,1,1,0,0,0,1,1,0,1,0 },
++  /* GNUC2Y   */ { 1,0,1,1,1,1,0,1,1,1,0,1,1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0 },
++  /* STDC89   */ { 0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* STDC94   */ { 0,0,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* STDC99   */ { 1,0,1,1,0,0,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* STDC11   */ { 1,0,1,1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* STDC17   */ { 1,0,1,1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 },
++  /* STDC23   */ { 1,0,1,1,1,1,1,1,1,0,0,1,1,0,1,1,1,1,0,1,1,0,0,0,1,1,0,1,0 },
++  /* STDC2Y   */ { 1,0,1,1,1,1,1,1,1,0,0,1,1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0 },
++  /* GNUCXX   */ { 0,1,1,1,0,1,0,1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* CXX98    */ { 0,1,0,1,0,1,1,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* GNUCXX11 */ { 1,1,1,1,1,1,0,1,1,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* CXX11    */ { 1,1,0,1,1,1,1,1,1,1,1,0,0,1,0,0,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* GNUCXX14 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* CXX14    */ { 1,1,0,1,1,1,1,1,1,1,1,1,1,1,0,0,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* GNUCXX17 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* CXX17    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* GNUCXX20 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* CXX20    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,0,0,0,0,0,0,1,0,0,1,0 },
++  /* GNUCXX23 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,0,1,0 },
++  /* CXX23    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,0,1,0 },
++  /* GNUCXX26 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,0,1,0 },
++  /* CXX26    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,0,1,0 },
++  /* GNUCXX29 */ { 1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1 },
++  /* CXX29    */ { 1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1 },
++  /* ASM      */ { 0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 }
+ };
+ 
+ /* Sets internal flags correctly for a given language.  */
+@@ -190,6 +193,7 @@ cpp_set_lang (cpp_reader *pfile, enum c_lang lang)
+   CPP_OPTION (pfile, embed)			 = l->embed;
+   CPP_OPTION (pfile, imaginary_constants)	 = l->imaginary_constants;
+   CPP_OPTION (pfile, low_ucns)			 = l->low_ucns;
++  CPP_OPTION (pfile, depend)			 = l->depend;
+ }
+ 
+ /* Initialize library global state.  */
+@@ -382,6 +386,7 @@ cpp_destroy (cpp_reader *pfile)
    _cpp_destroy_hashtable (pfile);
    _cpp_cleanup_files (pfile);
    _cpp_destroy_iconv (pfile);
@@ -4626,6 +5432,18 @@ index a480d1d4a26..9190a0ee728 100644
  
    _cpp_free_buff (pfile->a_buff);
    _cpp_free_buff (pfile->u_buff);
+@@ -601,7 +606,10 @@ cpp_init_builtins (cpp_reader *pfile, int hosted)
+     {
+       /* C++26 is not yet a standard.  For now, use an invalid
+ 	 year/month, 202400L, which is larger than 202302L.  */
+-      if (CPP_OPTION (pfile, lang) == CLK_CXX26
++      if (CPP_OPTION (pfile, lang) == CLK_CXX29
++	  || CPP_OPTION (pfile, lang) == CLK_GNUCXX29)
++	_cpp_define_builtin (pfile, "__cplusplus 202606L");
++      else if (CPP_OPTION (pfile, lang) == CLK_CXX26
+ 	  || CPP_OPTION (pfile, lang) == CLK_GNUCXX26)
+ 	_cpp_define_builtin (pfile, "__cplusplus 202400L");
+       else if (CPP_OPTION (pfile, lang) == CLK_CXX23
 diff --git a/libcpp/internal.h b/libcpp/internal.h
 index 017e980a964..8e2186dcdda 100644
 --- a/libcpp/internal.h
@@ -4664,10 +5482,13 @@ index 017e980a964..8e2186dcdda 100644
  				  const unsigned char *);
  extern bool _cpp_save_file_entries (cpp_reader *pfile, FILE *f);
 diff --git a/libstdc++-v3/ChangeLog b/libstdc++-v3/ChangeLog
-index 0db437b5322..563ceeb7840 100644
+index 44bf8d55eb5..2d72dca987b 100644
 --- a/libstdc++-v3/ChangeLog
 +++ b/libstdc++-v3/ChangeLog
-@@ -1,3 +1,12 @@
+@@ -172,6 +172,15 @@
+ 	* testsuite/std/simd/traits_impl.cc: Added using declaration
+ 	for std::__constexpr_wrapper_like.
+ 
 +2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
 +
 +	* include/Makefile.in: "regenerate" for new embed header
@@ -4680,7 +5501,7 @@ index 0db437b5322..563ceeb7840 100644
  2026-04-22  Jakub Jelinek  <jakub@redhat.com>
  
  	* include/bits/version.def (reflection): Bump 202506L to 202603L
-@@ -2452,7 +2461,7 @@
+@@ -2626,7 +2635,7 @@
  	std::out_of_range::~out_of_range()): Likewise.  Also change
  	_GLIBCXX_NOTHROW to noexcept on those definitions.
  
@@ -4690,7 +5511,7 @@ index 0db437b5322..563ceeb7840 100644
  
  Copying and distribution of this file, with or without modification,
 diff --git a/libstdc++-v3/include/Makefile.am b/libstdc++-v3/include/Makefile.am
-index e9e46139da2..3e9895a7f0f 100644
+index ec932181a96..3e124e97719 100644
 --- a/libstdc++-v3/include/Makefile.am
 +++ b/libstdc++-v3/include/Makefile.am
 @@ -34,6 +34,7 @@ std_freestanding = \
@@ -4702,7 +5523,7 @@ index e9e46139da2..3e9895a7f0f 100644
  	${std_srcdir}/functional \
  	${std_srcdir}/generator \
 diff --git a/libstdc++-v3/include/Makefile.in b/libstdc++-v3/include/Makefile.in
-index f3d2f58dbe4..7c9b2153bfb 100644
+index 00ae5209f60..4e52fbf100c 100644
 --- a/libstdc++-v3/include/Makefile.in
 +++ b/libstdc++-v3/include/Makefile.in
 @@ -127,11 +127,11 @@ am__v_P_1 = :
@@ -4841,7 +5662,7 @@ index 62bc83f7ea1..48dd643eea7 100644
  #undef __glibcxx_want_all
 diff --git a/libstdc++-v3/include/std/embed b/libstdc++-v3/include/std/embed
 new file mode 100644
-index 00000000000..7899bb5270b
+index 00000000000..09da7a52cba
 --- /dev/null
 +++ b/libstdc++-v3/include/std/embed
 @@ -0,0 +1,272 @@
@@ -4999,7 +5820,7 @@ index 00000000000..7899bb5270b
 +  /// @return A view into the specified resource at `__offset` with up to
 +  ///         `__limit` elements, or the rest of the resource if `__limit` is
 +  ///         `nullopt`.
-+  template<typename _By>
++  template<typename _By = byte>
 +    [[nodiscard]]
 +    consteval span<const _By>
 +    embed(string_view __resource, size_t __offset = 0, optional<size_t> __limit = nullopt)
@@ -5020,7 +5841,7 @@ index 00000000000..7899bb5270b
 +  /// @return A view into the specified resource at `__offset` with up to
 +  ///         `__limit` elements, or the rest of the resource if `__limit` is
 +  ///         `nullopt`.
-+  template<typename _By>
++  template<typename _By = byte>
 +    [[nodiscard]]
 +    consteval span<const _By>
 +    embed(wstring_view __resource, size_t __offset = 0, optional<size_t> __limit = nullopt)
@@ -5041,7 +5862,7 @@ index 00000000000..7899bb5270b
 +  /// @return A view into the specified resource at `__offset` with up to
 +  ///         `__limit` elements, or the rest of the resource if `__limit` is
 +  ///         `nullopt`.
-+  template<typename _By>
++  template<typename _By = byte>
 +    [[nodiscard]]
 +    consteval span<const _By>
 +    embed(u8string_view __resource, size_t __offset = 0, optional<size_t> __limit = nullopt)
@@ -5060,7 +5881,7 @@ index 00000000000..7899bb5270b
 +  ///                     resource. Applied before the limit.
 +  /// @return A view into the specified resource at `__offset` with exactly
 +  ///         `_Ex` elements.
-+  template<typename _By, size_t _Ex>
++  template<size_t _Ex, typename _By = byte>
 +    [[nodiscard]]
 +    consteval span<const _By, _Ex>
 +    embed(string_view __resource, size_t __offset = 0)
@@ -5079,7 +5900,7 @@ index 00000000000..7899bb5270b
 +  ///                     resource. Applied before the limit.
 +  /// @return A view into the specified resource at `__offset` with exactly
 +  ///         `_Ex` elements.
-+  template<typename _By, size_t _Ex>
++  template<size_t _Ex, typename _By = byte>
 +    [[nodiscard]]
 +    consteval span<const _By, _Ex>
 +    embed(wstring_view __resource, size_t __offset = 0)
@@ -5098,7 +5919,7 @@ index 00000000000..7899bb5270b
 +  ///                     resource. Applied before the limit.
 +  /// @return A view into the specified resource at `__offset` with exactly
 +  ///         `_Ex` elements.
-+  template<typename _By, size_t _Ex>
++  template<size_t _Ex, typename _By = byte>
 +    [[nodiscard]]
 +    consteval span<const _By, _Ex>
 +    embed(u8string_view __resource, size_t __offset = 0)
@@ -5117,6 +5938,43 @@ index 00000000000..7899bb5270b
 +
 +#endif // __cpp_lib_embed
 +#endif // _GLIBCXX_EMBED
+diff --git a/libstdc++-v3/testsuite/std/embed/mandates.cc b/libstdc++-v3/testsuite/std/embed/mandates.cc
+new file mode 100644
+index 00000000000..e69de29bb2d
+diff --git a/libstdc++-v3/testsuite/std/embed/nodiscard.cc b/libstdc++-v3/testsuite/std/embed/nodiscard.cc
+new file mode 100644
+index 00000000000..a2debe418b1
+--- /dev/null
++++ b/libstdc++-v3/testsuite/std/embed/nodiscard.cc
+@@ -0,0 +1,25 @@
++// { dg-do compile { target c++2d } }
++// { dg-require-cpp-feature-test "__cpp_lib_text_encoding" }
++
++#define STR_PREFIX_(a, b) a##b
++#define STR_PREFIX(a, b) STR_PREFIX_(a, b)
++
++consteval void test() {
++#if TEST_STD_VER >= 23
++  // make sure to test each individual overload
++  std::embed(__FILE__);
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  std::embed<1>(__FILE__);
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++
++  std::embed(STR_PREFIX(L, __FILE__));
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  std::embed<1>(STR_PREFIX(L, __FILE__));
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++
++  std::embed(STR_PREFIX(u8, __FILE__));
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  std::embed<1>(STR_PREFIX(u8, __FILE__));
++  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++#endif
++}
+diff --git a/libstdc++-v3/testsuite/std/embed/post-conditions.cc b/libstdc++-v3/testsuite/std/embed/post-conditions.cc
+new file mode 100644
+index 00000000000..e69de29bb2d
 -- 
 2.53.0
 
