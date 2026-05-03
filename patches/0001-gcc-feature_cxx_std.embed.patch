@@ -1,4 +1,4 @@
-From 52ed4167c33764cbd2ad86d252ebbd7709ccf02b Mon Sep 17 00:00:00 2001
+From 21c96eb23255a76ae54501411ec39e0d492df183 Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?Bj=C3=B6rkus=20=27ThePhD=27=20Dorkus?=
  <phdofthehouse@gmail.com>
 Date: Sun, 3 May 2026 00:24:35 +0200
@@ -26,16 +26,16 @@ Signed-off-by: Björkus 'ThePhD' Dorkus <phdofthehouse@gmail.com>
  gcc/cp/call.cc                                |   7 +-
  gcc/cp/constexpr.cc                           |  28 +
  gcc/cp/tree.cc                                |  16 +-
- gcc/doc/extend.texi                           | 796 ++++++++++--------
+ gcc/doc/extend.texi                           | 811 ++++++++++--------
  gcc/doc/invoke.texi                           |  12 +
  gcc/incpath.cc                                | 172 ++++
  gcc/incpath.h                                 |  23 +
  .../cpp/embed-dir/resources/a/b/empty         |   0
  .../cpp/embed-dir/resources/art.bin           |   1 +
- .../g++.dg/ext/builtin-std-embed-errors1.C    |  47 ++
  gcc/testsuite/g++.dg/ext/builtin-std-embed1.C |  70 ++
  gcc/testsuite/g++.dg/ext/builtin-std-embed2.C | 196 +++++
- gcc/testsuite/g++.dg/ext/builtin-std-embed3.C | 198 +++++
+ gcc/testsuite/g++.dg/ext/builtin-std-embed3.C | 201 +++++
+ gcc/testsuite/g++.dg/ext/builtin-std-embed4.C |  47 +
  gcc/tree-core.h                               |  15 +
  gcc/tree.cc                                   | 149 +++-
  gcc/tree.h                                    |  12 +
@@ -52,27 +52,31 @@ Signed-off-by: Björkus 'ThePhD' Dorkus <phdofthehouse@gmail.com>
  libstdc++-v3/include/Makefile.in              |  23 +-
  libstdc++-v3/include/bits/version.def         |  10 +
  libstdc++-v3/include/bits/version.h           |  10 +
- libstdc++-v3/include/std/embed                | 272 ++++++
- libstdc++-v3/testsuite/std/embed/mandates.cc  |   0
- libstdc++-v3/testsuite/std/embed/nodiscard.cc |  25 +
- .../testsuite/std/embed/post-conditions.cc    |   0
- 45 files changed, 2994 insertions(+), 538 deletions(-)
+ libstdc++-v3/include/std/embed                | 278 ++++++
+ libstdc++-v3/testsuite/std/embed/a.txt        |   1 +
+ libstdc++-v3/testsuite/std/embed/empty        |   0
+ libstdc++-v3/testsuite/std/embed/mandates.cc  |  26 +
+ libstdc++-v3/testsuite/std/embed/nodiscard.cc |  33 +
+ .../testsuite/std/embed/post-conditions.cc    |  48 ++
+ 47 files changed, 3101 insertions(+), 538 deletions(-)
  create mode 100644 gcc/testsuite/c-c++-common/cpp/embed-dir/resources/a/b/empty
  create mode 100644 gcc/testsuite/c-c++-common/cpp/embed-dir/resources/art.bin
- create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed-errors1.C
  create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed1.C
  create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed2.C
  create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed3.C
+ create mode 100644 gcc/testsuite/g++.dg/ext/builtin-std-embed4.C
  create mode 100644 libstdc++-v3/include/std/embed
+ create mode 100644 libstdc++-v3/testsuite/std/embed/a.txt
+ create mode 100644 libstdc++-v3/testsuite/std/embed/empty
  create mode 100644 libstdc++-v3/testsuite/std/embed/mandates.cc
  create mode 100644 libstdc++-v3/testsuite/std/embed/nodiscard.cc
  create mode 100644 libstdc++-v3/testsuite/std/embed/post-conditions.cc
 
 diff --git a/gcc/ChangeLog b/gcc/ChangeLog
-index c12ecdb1cac..4e9c2722996 100644
+index d414a2dda57..35249b21f86 100644
 --- a/gcc/ChangeLog
 +++ b/gcc/ChangeLog
-@@ -1526,6 +1526,35 @@
+@@ -1546,6 +1546,35 @@
  
  	* config/riscv/riscv.cc (vxrm_unknown_p): Remove `CALL_P` check
  
@@ -108,7 +112,7 @@ index c12ecdb1cac..4e9c2722996 100644
  2026-04-22  Sam James  <sam@gentoo.org>
  
  	* ipa-prop.cc (param_type_may_change_p): Fix comment typo.
-@@ -8360,7 +8389,7 @@
+@@ -8380,7 +8409,7 @@
  	* doc/install.texi: Ditto.
  	* doc/invoke.texi: Ditto.
  
@@ -1605,7 +1609,7 @@ index c510a5bf2d0..acef87c33f8 100644
  /* Complain that some language-specific thing hanging off a tree
     node has been accessed improperly.  */
 diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
-index 0faa5323ce1..12df2c3d830 100644
+index 0faa5323ce1..2df2ea4e0b6 100644
 --- a/gcc/doc/extend.texi
 +++ b/gcc/doc/extend.texi
 @@ -1432,7 +1432,7 @@ instruction. Pointers to this address space are 16 bits wide.
@@ -3022,27 +3026,41 @@ index 0faa5323ce1..12df2c3d830 100644
  compiler may also ignore this parameter.
  @enddefbuiltin
  
-@@ -18545,6 +18545,90 @@ Returns the openacc gang, worker or vector size depending on whether @var{x} is
+@@ -18545,6 +18545,105 @@ Returns the openacc gang, worker or vector size depending on whether @var{x} is
  0, 1 or 2.
  @enddefbuiltin
  
-+@defbuiltin{Ty const* __builtin_std_embed (unsigned int @var{locus}, int & @var{status}, size_t & @var{out_size}, Ty const* @var{indicator_ptr} size_t @var{resource_name_size}, Ch const* @var{resource_name}, size_t @var{offset}, size_t @var{limit})}
++@deftypefn {Built-in Function} {template <typename Ty, typename Ch> @* consteval Ty const *} @
++__builtin_std_embed (@*@
++unsigned int @var{locus}, int &s@var{status}, size_t &@var{out_size}, Ty const *@var{indicator_ptr}, @*@
++size_t @var{resource_name_size}, Ch const *@var{resource_name}, size_t @var{offset}[, size_t @var{limit}])
++
 +Returns a pointer to backing storage suitably-sized to access @var{out_size}
 +elements of a contiguous sequence of @var{const T} objects. The signature
 +above is not exact and the builtin does not behave exactly as a function
-+template of this declaration type.
++template with @code{Ty} and @code{Ch} template types, but is a decent
++approximation for a regular function that can infer @code{Ty} and @code{Ch}
++from what is passed in. Template arguments cannot be passed in explicitly
++and will result in a parsing errors.
 +
-+The @var{locus} argument is always @code{1} and is significant for implementers
-+only. If you are asking the question "am I an implementer?", you are not an
-+implementer and you should be passing in a value equivalent to @code{1}.
-+If you can answer this in the affirmative, @var{locus} can be broken down as
-+@code{do-local-search = (locus & 0x1)} and
++@var{locus} is broken down as @code{do-local-search = (locus & 0x1)} and
 +@code{call-stack-distance = (locus >> 1)}. @code{do-local-search} is whether
-+a local, location-based search should be performed at all.
++a local file location-based search should be performed at all.
 +@code{call-stack-distance} is the distance that this builtin call is removed
-+from where a normal user would be interfacing with this builtin for file-based
-+local search. For example, from within the depths of a @code{std::embed} call,
-+@code{locus} would likely be @code{0b101} or @code{0b111}.
++from where a normal user would be interfacing with this builtin for
++aforementioned file-based local search. For example, from within the depths of
++a @code{std::embed} call, @code{locus} would likely be @code{0b101} or
++@code{0b111}.
++
++@emph{Note:} The @var{locus} argument should typically be @code{1}
++(do quoted search) and is typically significant for implementers wrapping this
++builtin. If you are asking the question "am I an implementer?", then you should
++probably be passing in a value equivalent to @code{1} (do quoted search) or
++@code{0} (do not do quoted search). Complex recursive calls may require the
++use of @var{locus} with extra depth. In general, it is not advisable to rely on
++local file-based search: use @code{--embed-dir=...} to provide a proper
++directory and @code {#depend <...>} to rely on that directory, with
++appropriate @code{*} or @code{**} markers in the @code{#depend} as needed.
 +
 +The @var{limit} argument is optional.
 +
@@ -3057,25 +3075,25 @@ index 0faa5323ce1..12df2c3d830 100644
 +
 +@code{status} is one of:
 +
-+@itemize @minus{}
++@itemize --- 
 +@item
-+@code{0} --- The file could not be found.
++@code{0} - The file could not be found.
 +
 +@item
-+@code{1} --- The file was found, @code{#depend}ed on, and not empty.
++@code{1} - The file was found, @code{#depend}ed on, and not empty.
 +
 +@item
-+@code{2} --- The file was found but was not properly @code{#depend}ed on.
++@code{2} - The file was found but was not properly @code{#depend}ed on.
 +
 +@item
-+@code{3} --- The file was found and @code{#depend}ed on, but it was empty.
++@code{3} - The file was found and @code{#depend}ed on, but it was empty.
 +@end itemize
 +
 +If the function returns, @var{status} will be one of the above returns. The
 +compiler will emit an error if some other case such as improper arguments is
 +violated.
 +
-+The resource is consdiered empty if the combination of @var{offset} and
++The resource is considered empty if the combination of @var{offset} and
 +@var{limit} causes the effective size of the resource to be 0. In all
 +cases where @var{status} is not @code{3}, a null pointer of type
 +@code{T const*} is returned and @var{out_size} is untouched. @var{offset}
@@ -3091,15 +3109,15 @@ index 0faa5323ce1..12df2c3d830 100644
 +@code{Ch} must be one of @code{char}, @code{wchar_t}, or @code{char8_t}.
 +
 +@emph{Note:} Strings that are 8-bits wide are treated as byte strings and
-+typically sent directly to underlying file systems. @code{wchar_t} of size
-+16-bits is typically treated as UTF-16, and @code{wchar_t} of size 32-bits
-+is typically treated as UTF-32, unless otherwise dictated by command line
-+options such as @code{-fwide-exec-charset=...}. If a conversion has to be done
-+and it fails, an error occurs. Users may try different strings inputs and
-+various options to try to pass through paths as faithfully as possible.
-+@code{-fexec-charset=...} does not affect this because all 8-bit strings are
-+treated the same. When ported to Windows systems, this may not be the case as
-+the native file system interface utilizes UTF-16.
++typically sent directly to underlying file systems. Wide @code{wchar_t} strings
++of size 16-bits is typically treated as UTF-16, and wide @code{wchar_t} strings
++of size 32-bits is typically treated as UTF-32, unless otherwise dictated by
++command line options such as @code{-fwide-exec-charset=...}. If a conversion
++has to be done and it fails, an error occurs. Users may try different strings
++inputs and various options to try to pass through paths as faithfully as
++possible. @code{-fexec-charset=...} does not affect this because all 8-bit
++strings are treated the same. When ported to Windows systems, this may not be
++the case as the native file system interface utilizes UTF-16.
 +
 +For the best portability and results, utilize paths that are clean UTF-8.
 +
@@ -3107,13 +3125,14 @@ index 0faa5323ce1..12df2c3d830 100644
 +builtin and it is not guaranteed to return a unique pointer to unique data.
 +Its address is @emph{non-unique}.
 +
-+A future extension can possibly allow for additional types, possibly
-+all types which are considered "trivial" types.
-+@enddefbuiltin
++A future extension for this builtin could possibly allow for additional types,
++possibly all types which are considered "trivial" types.
++@end deftypefn
++
  
  @node Target Builtins
  @section Built-in Functions Specific to Particular Target Machines
-@@ -25618,7 +25702,7 @@ The @code{scalar_cmp_exp_gt}, @code{scalar_cmp_exp_lt},
+@@ -25618,7 +25717,7 @@ The @code{scalar_cmp_exp_gt}, @code{scalar_cmp_exp_lt},
  functions return a non-zero value if @code{arg1} is greater than, less
  than, equal to, or not comparable to @code{arg2} respectively.  The
  arguments are not comparable if one or the other equals NaN (not a
@@ -3122,7 +3141,7 @@ index 0faa5323ce1..12df2c3d830 100644
  
  The @code{scalar_test_data_class} built-in function returns 1
  if any of the condition tests enabled by the value of the
-@@ -30384,7 +30468,7 @@ v2si __builtin_ia32_pswapdsi (v2si);
+@@ -30384,7 +30483,7 @@ v2si __builtin_ia32_pswapdsi (v2si);
  
  The following built-in functions are available when @option{-mrtm} is used
  They are used for restricted transactional memory. These are the internal
@@ -3131,7 +3150,7 @@ index 0faa5323ce1..12df2c3d830 100644
  @ref{x86 transactional memory intrinsics} should be used instead.
  
  @smallexample
-@@ -30443,7 +30527,7 @@ void __builtin_ia32_clrssbsy(void *);
+@@ -30443,7 +30542,7 @@ void __builtin_ia32_clrssbsy(void *);
  These hardware transactional memory intrinsics for x86 allow you to use
  memory transactions with RTM (Restricted Transactional Memory).
  This support is enabled with the @option{-mrtm} option.
@@ -3140,7 +3159,7 @@ index 0faa5323ce1..12df2c3d830 100644
  @ref{x86 specific memory model extensions for transactional memory} instead.
  
  A memory transaction commits all changes to memory in an atomic way,
-@@ -30454,10 +30538,10 @@ Generally there is no guarantee that a memory transaction ever succeeds
+@@ -30454,10 +30553,10 @@ Generally there is no guarantee that a memory transaction ever succeeds
  and suitable fallback code always needs to be supplied.
  
  @deftypefn {RTM Function} {unsigned} _xbegin ()
@@ -3154,7 +3173,7 @@ index 0faa5323ce1..12df2c3d830 100644
  
  If the transaction aborts, all side effects
  are undone and an abort code encoded as a bit mask is returned.
-@@ -30505,7 +30589,7 @@ Return a nonzero value if a transaction is currently active, otherwise 0.
+@@ -30505,7 +30604,7 @@ Return a nonzero value if a transaction is currently active, otherwise 0.
  
  @deftypefn {RTM Function} {void} _xabort (status)
  Abort the current transaction. When no transaction is active this is a no-op.
@@ -3163,7 +3182,7 @@ index 0faa5323ce1..12df2c3d830 100644
  value from @code{_xbegin}.
  @end deftypefn
  
-@@ -30519,18 +30603,18 @@ int n_tries, max_tries;
+@@ -30519,18 +30618,18 @@ int n_tries, max_tries;
  unsigned status = _XABORT_EXPLICIT;
  ...
  
@@ -3186,7 +3205,7 @@ index 0faa5323ce1..12df2c3d830 100644
    @{
      ... non-transactional fallback path...
    @}
-@@ -30546,7 +30630,7 @@ must synchronize together to ensure consistency.
+@@ -30546,7 +30645,7 @@ must synchronize together to ensure consistency.
  @deftypefn {CET Function} {ret_type} _get_ssp (void)
  Get the current value of shadow stack pointer if shadow stack support
  from Intel CET is enabled in the hardware or @code{0} otherwise.
@@ -3195,7 +3214,7 @@ index 0faa5323ce1..12df2c3d830 100644
  and @code{unsigned int} for 32-bit targets.
  @end deftypefn
  
-@@ -31424,7 +31508,7 @@ Function Multiversioning} for more details.
+@@ -31424,7 +31523,7 @@ Function Multiversioning} for more details.
  @section Type Traits
  
  The C++ front end implements syntactic extensions that allow
@@ -3478,59 +3497,6 @@ index 00000000000..643caf6a0d9
 +++ b/gcc/testsuite/c-c++-common/cpp/embed-dir/resources/art.bin
 @@ -0,0 +1 @@
 +                                         @#=+@@                 @@%%@@                              R                  @======%@            @@%%%%%%%@                                                 %=*%%==============*##%%%%%%%@                                                  %=%%%*============*###%%%%%@                              A                     @=%+=========+****##%%%%%%                                                       *==+----===+-----+#%%%%@                                                      @==-----====--%%*---=%%%@                               C                      +=*-#%@@%-===%%@@%%%--%%%@                                                     #*-%%%%%*-===-%@%%%#%#**%@                                                     @+**%%%=--**--+*%@@@@#**%%                              C                       *+=+-=--@%%%#-=****++***%@                                                     @***+==--===---#+*******%%@                                                    @*==**%%%#%%%%**+*******%%@                                                    @+===+**%%#**************%%@                                                  %========*****************%%%@                                               @======*********************#%%@                                              *========********************##%%@                                            +=========*******************###%%@                                         @===========+******************#####%@                                       #=============+****************#######%@                                     @+==============****************########%%                                    %================+**************##########%@                                  @@=================*************###########%%@                                  @=================*************###########%%@                                  +==================************############%@                                @@@===================+**********############%%                                  *================+===**********###########%@@                                 @+================*+==+*********##########%%@@                                  @==============%%*+===********###########%%@                                   @+=============%%**+==+*******#%#%#######%@                                     %=============%%%#**==*******#%%%#######@                      @@@  @ @@@      @=============*#%###*+*******#%%%%%#####@           @@@#-----##%%%%-----%%%%----++============#######******##%%%%%%####@        @-%%%%%%-----*%%%%%----*%%%-===#*======+#====@########*=+*###%%%%@@###@      @%=--=%%%%%-----%%%%%+----%%%#===*%====%%%%%%%#@@#########=####%@@@ @###@     @%%%%--%%%%%-----%%%%------%%%%==--%%====#%%@@@@@@@%@%#####@%####@@@@#####@    @@%%#---%%%*====@@@*+*####@@@%=--=%%%%+=+###@@@%%@@@@@@@@@@@######@@@######@                                        @@@@@@                 @#######@@########@                                                            @#########@@#@@##@                                                              @########@   🦝
-diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed-errors1.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed-errors1.C
-new file mode 100644
-index 00000000000..5a24e76f5ab
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/builtin-std-embed-errors1.C
-@@ -0,0 +1,47 @@
-+// { dg-do compile { target c++23 } }
-+// { dg-options "--embed-dir=${srcdir}/c-c++-common/cpp/embed-dir" }
-+
-+namespace std
-+{
-+  enum byte : unsigned char {};
-+  typedef decltype(sizeof(0)) size_t;
-+}
-+
-+#depend __FILE__
-+// { dg-warning "'#depend' is a C++29 extension" .-1 }
-+
-+consteval void f ()
-+{
-+
-+  unsigned int locus = 0;
-+  int status = 0;
-+  std::size_t size = 0;
-+  const char* ptrc = 0;
-+  std::size_t offset = 0;
-+  std::size_t limit = 0;
-+  struct illegal_t { unsigned char c; } illegal = {};
-+
-+  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, offset, limit, illegal);
-+  // { dg-error "too many arguments to function '__builtin_std_embed'"" .-1 }
-+  (void)__builtin_std_embed(locus, status, size);
-+  // { dg-error "too few arguments to function '__builtin_std_embed'" .-1 }
-+  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc);
-+  // { dg-error "too few arguments to function '__builtin_std_embed'" .-1 }
-+  (void)__builtin_std_embed(illegal, status, size, ptrc, 0, ptrc, offset, limit);
-+  // { dg-error "cannot convert 'f()::illegal_t' to 'unsigned int'" .-1 }
-+  (void)__builtin_std_embed(locus, illegal, size, ptrc, 0, ptrc, offset, limit);
-+  // { dg-error "invalid initialization of reference of type 'int&' from expression of type 'f()::illegal_t'" .-1 }
-+  // size_t might change between platforms: fix the type in-place
-+  (void)__builtin_std_embed(locus, status, illegal, ptrc, 0, ptrc, offset, limit);
-+  // { dg-error "invalid initialization of reference of type " .-1 }
-+  (void)__builtin_std_embed(locus, status, size, illegal, 0, ptrc, offset, limit);
-+  // { dg-error "argument 4 to '__builtin_std_embed' must be a pointer to a 'const' integer or enumeration type of sizeof and alignof equal to 1" .-1 }
-+  (void)__builtin_std_embed(locus, status, size, ptrc, illegal, ptrc, offset, limit);
-+  // { dg-error "argument 5 to function '__builtin_std_embed' must be an integer type" .-1 }
-+  (void)__builtin_std_embed(locus, status, size, ptrc, 0, illegal, offset, limit);
-+  // { dg-error "argument 6 to function '__builtin_std_embed' must be a pointer to 'char', 'wchar_t',  or 'char8_t'" .-1 }
-+  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, illegal, limit);
-+  // { dg-error "argument 7 to function '__builtin_std_embed' must be an integral type" .-1 }
-+  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, offset, illegal);
-+  // { dg-error "argument 8 to function '__builtin_std_embed' must be an integral type" .-1 }
-+}
 diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed1.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed1.C
 new file mode 100644
 index 00000000000..ea5977841b4
@@ -3609,7 +3575,7 @@ index 00000000000..ea5977841b4
 +static_assert(local_file());
 diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed2.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed2.C
 new file mode 100644
-index 00000000000..523f7ec1a06
+index 00000000000..18cc5db095a
 --- /dev/null
 +++ b/gcc/testsuite/g++.dg/ext/builtin-std-embed2.C
 @@ -0,0 +1,196 @@
@@ -3717,41 +3683,41 @@ index 00000000000..523f7ec1a06
 +}
 +
 +consteval bool art () {
-+  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/racc.bin");
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/art.bin");
 +  static_assert(v0.status == found);
 +  static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, &v_correct[0], v_correct_end));
 +  static_assert(v0.size == v_correct_size);
-+  constexpr auto v1 = non_local_lookup_core<unsigned char>(L"resources/racc.bin");
++  constexpr auto v1 = non_local_lookup_core<unsigned char>(L"resources/art.bin");
 +  static_assert(v1.status == found);
 +  static_assert(byte_equal(v1.ptr, v1.ptr + v1.size, &v_correct[0], v_correct_end));
 +  static_assert(v1.size == v_correct_size);
-+  constexpr auto v2 = non_local_lookup_core<unsigned char>(u8"resources/racc.bin");
++  constexpr auto v2 = non_local_lookup_core<unsigned char>(u8"resources/art.bin");
 +  static_assert(v2.status == found);
 +  static_assert(byte_equal(v2.ptr, v2.ptr + v2.size, &v_correct[0], v_correct_end));
 +  static_assert(v2.size == v_correct_size);
 +
-+  constexpr auto v3 = non_local_lookup_core<char>("resources/racc.bin");
++  constexpr auto v3 = non_local_lookup_core<char>("resources/art.bin");
 +  static_assert(v3.status == found);
 +  static_assert(byte_equal(v3.ptr, v3.ptr + v3.size, &v_correct[0], v_correct_end));
 +  static_assert(v3.size == v_correct_size);
-+  constexpr auto v4 = non_local_lookup_core<char>(L"resources/racc.bin");
++  constexpr auto v4 = non_local_lookup_core<char>(L"resources/art.bin");
 +  static_assert(v4.status == found);
 +  static_assert(byte_equal(v4.ptr, v4.ptr + v4.size, &v_correct[0], v_correct_end));
 +  static_assert(v4.size == v_correct_size);
-+  constexpr auto v5 = non_local_lookup_core<char>(u8"resources/racc.bin");
++  constexpr auto v5 = non_local_lookup_core<char>(u8"resources/art.bin");
 +  static_assert(v5.status == found);
 +  static_assert(byte_equal(v5.ptr, v5.ptr + v5.size, &v_correct[0], v_correct_end));
 +  static_assert(v5.size == v_correct_size);
 +
-+  constexpr auto v6 = non_local_lookup_core<std::byte>("resources/racc.bin");
++  constexpr auto v6 = non_local_lookup_core<std::byte>("resources/art.bin");
 +  static_assert(v6.status == found);
 +  static_assert(byte_equal(v6.ptr, v6.ptr + v6.size, &v_correct[0], v_correct_end));
 +  static_assert(v6.size == v_correct_size);
-+  constexpr auto v7 = non_local_lookup_core<std::byte>(L"resources/racc.bin");
++  constexpr auto v7 = non_local_lookup_core<std::byte>(L"resources/art.bin");
 +  static_assert(v7.status == found);
 +  static_assert(byte_equal(v7.ptr, v7.ptr + v7.size, &v_correct[0], v_correct_end));
 +  static_assert(v7.size == v_correct_size);
-+  constexpr auto v8 = non_local_lookup_core<std::byte>(u8"resources/racc.bin");
++  constexpr auto v8 = non_local_lookup_core<std::byte>(u8"resources/art.bin");
 +  static_assert(v8.status == found);
 +  static_assert(byte_equal(v8.ptr, v8.ptr + v8.size, &v_correct[0], v_correct_end));
 +  static_assert(v8.size == v_correct_size);
@@ -3773,13 +3739,13 @@ index 00000000000..523f7ec1a06
 +consteval bool offset () {
 +  constexpr std::size_t R_offset = 100;
 +  constexpr std::size_t A_offset = 237;
-+  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/racc.bin", R_offset);
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/art.bin", R_offset);
 +  static_assert(v0.status == found);
 +  static_assert(v0.ptr[0] == (unsigned char)'R');
 +  static_assert(v0.ptr[A_offset] == (unsigned char)'A');
 +  static_assert(v0.size == v_correct_size - R_offset);
 +
-+  constexpr auto v1 = non_local_lookup_core<unsigned char>("resources/racc.bin", size_max);
++  constexpr auto v1 = non_local_lookup_core<unsigned char>("resources/art.bin", size_max);
 +  static_assert(v1.status == found_empty);
 +  static_assert(v1.ptr == nullptr);
 +  static_assert(v1.size == 0);
@@ -3791,13 +3757,13 @@ index 00000000000..523f7ec1a06
 +  constexpr std::size_t line_offset = 553;
 +  constexpr std::size_t line_limit = 79;
 +  constexpr std::size_t C_offset = 21;
-+  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/racc.bin", line_offset, line_limit);
++  constexpr auto v0 = non_local_lookup_core<unsigned char>("resources/art.bin", line_offset, line_limit);
 +  static_assert(v0.status == found);
 +  static_assert(v0.ptr[C_offset] == (unsigned char)'C');
 +  static_assert(v0.size == line_limit);
 +  static_assert(byte_equal(v0.ptr, v0.ptr + v0.size, v_correct + line_offset, v_correct + line_offset + line_limit));
 +
-+  constexpr auto v1 = non_local_lookup_core<unsigned char>("resources/racc.bin", 0, 0);
++  constexpr auto v1 = non_local_lookup_core<unsigned char>("resources/art.bin", 0, 0);
 +  static_assert(v1.status == found_empty);
 +  static_assert(v1.ptr == nullptr);
 +  static_assert(v1.size == 0);
@@ -3811,12 +3777,15 @@ index 00000000000..523f7ec1a06
 +static_assert(limit());
 diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed3.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed3.C
 new file mode 100644
-index 00000000000..a88cd38a709
+index 00000000000..2c32dcf5beb
 --- /dev/null
 +++ b/gcc/testsuite/g++.dg/ext/builtin-std-embed3.C
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,201 @@
 +// { dg-do compile { target c++23 } }
 +// { dg-options "--embed-dir=${srcdir}/c-c++-common/cpp/embed-dir" }
++
++#define STR_PREFIX_(a, b) a##b
++#define STR_PREFIX(a, b) STR_PREFIX_(a, b)
 +
 +#depend "resources/**"
 +// { dg-warning "'#depend' is a C++2d extension" .-1 }
@@ -3924,41 +3893,41 @@ index 00000000000..a88cd38a709
 +
 +consteval bool not_depended_on ()
 +{
-+  constexpr auto v0 = local_lookup_core<unsigned char>("consteval-builtin-std-embed.cpp");
++  constexpr auto v0 = local_lookup_core<unsigned char>(__FILE__);
 +  static_assert(v0.status == no_depend);
 +  static_assert(v0.ptr == nullptr);
 +  static_assert(v0.size == sentinel_size);
-+  constexpr auto v1 = local_lookup_core<unsigned char>(L"consteval-builtin-std-embed.cpp");
++  constexpr auto v1 = local_lookup_core<unsigned char>(STR_PREFIX(L, __FILE__));
 +  static_assert(v1.status == no_depend);
 +  static_assert(v1.ptr == nullptr);
 +  static_assert(v1.size == sentinel_size);
-+  constexpr auto v2 = local_lookup_core<unsigned char>(u8"consteval-builtin-std-embed.cpp");
++  constexpr auto v2 = local_lookup_core<unsigned char>(STR_PREFIX(u8, __FILE__));
 +  static_assert(v2.status == no_depend);
 +  static_assert(v2.ptr == nullptr);
 +  static_assert(v2.size == sentinel_size);
 +
-+  constexpr auto v3 = local_lookup_core<char>("consteval-builtin-std-embed.cpp");
++  constexpr auto v3 = local_lookup_core<char>(__FILE__);
 +  static_assert(v3.status == no_depend);
 +  static_assert(v3.ptr == nullptr);
 +  static_assert(v3.size == sentinel_size);
-+  constexpr auto v4 = local_lookup_core<char>(L"consteval-builtin-std-embed.cpp");
++  constexpr auto v4 = local_lookup_core<char>(STR_PREFIX(L, __FILE__));
 +  static_assert(v4.status == no_depend);
 +  static_assert(v4.ptr == nullptr);
 +  static_assert(v4.size == sentinel_size);
-+  constexpr auto v5 = local_lookup_core<char>(u8"consteval-builtin-std-embed.cpp");
++  constexpr auto v5 = local_lookup_core<char>(STR_PREFIX(u8, __FILE__));
 +  static_assert(v5.status == no_depend);
 +  static_assert(v5.ptr == nullptr);
 +  static_assert(v5.size == sentinel_size);
 +
-+  constexpr auto v6 = local_lookup_core<std::byte>("consteval-builtin-std-embed.cpp");
++  constexpr auto v6 = local_lookup_core<std::byte>(__FILE__);
 +  static_assert(v6.status == no_depend);
 +  static_assert(v6.ptr == nullptr);
 +  static_assert(v6.size == sentinel_size);
-+  constexpr auto v7 = local_lookup_core<std::byte>(L"consteval-builtin-std-embed.cpp");
++  constexpr auto v7 = local_lookup_core<std::byte>(STR_PREFIX(L, __FILE__));
 +  static_assert(v7.status == no_depend);
 +  static_assert(v7.ptr == nullptr);
 +  static_assert(v7.size == sentinel_size);
-+  constexpr auto v8 = local_lookup_core<std::byte>(u8"consteval-builtin-std-embed.cpp");
++  constexpr auto v8 = local_lookup_core<std::byte>(STR_PREFIX(u8, __FILE__));
 +  static_assert(v8.status == no_depend);
 +  static_assert(v8.ptr == nullptr);
 +  static_assert(v8.size == sentinel_size);
@@ -4013,6 +3982,59 @@ index 00000000000..a88cd38a709
 +static_assert(does_not_exist());
 +static_assert(not_depended_on());
 +static_assert(empty());
+diff --git a/gcc/testsuite/g++.dg/ext/builtin-std-embed4.C b/gcc/testsuite/g++.dg/ext/builtin-std-embed4.C
+new file mode 100644
+index 00000000000..5a24e76f5ab
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/builtin-std-embed4.C
+@@ -0,0 +1,47 @@
++// { dg-do compile { target c++23 } }
++// { dg-options "--embed-dir=${srcdir}/c-c++-common/cpp/embed-dir" }
++
++namespace std
++{
++  enum byte : unsigned char {};
++  typedef decltype(sizeof(0)) size_t;
++}
++
++#depend __FILE__
++// { dg-warning "'#depend' is a C++29 extension" .-1 }
++
++consteval void f ()
++{
++
++  unsigned int locus = 0;
++  int status = 0;
++  std::size_t size = 0;
++  const char* ptrc = 0;
++  std::size_t offset = 0;
++  std::size_t limit = 0;
++  struct illegal_t { unsigned char c; } illegal = {};
++
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, offset, limit, illegal);
++  // { dg-error "too many arguments to function '__builtin_std_embed'"" .-1 }
++  (void)__builtin_std_embed(locus, status, size);
++  // { dg-error "too few arguments to function '__builtin_std_embed'" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc);
++  // { dg-error "too few arguments to function '__builtin_std_embed'" .-1 }
++  (void)__builtin_std_embed(illegal, status, size, ptrc, 0, ptrc, offset, limit);
++  // { dg-error "cannot convert 'f()::illegal_t' to 'unsigned int'" .-1 }
++  (void)__builtin_std_embed(locus, illegal, size, ptrc, 0, ptrc, offset, limit);
++  // { dg-error "invalid initialization of reference of type 'int&' from expression of type 'f()::illegal_t'" .-1 }
++  // size_t might change between platforms: fix the type in-place
++  (void)__builtin_std_embed(locus, status, illegal, ptrc, 0, ptrc, offset, limit);
++  // { dg-error "invalid initialization of reference of type " .-1 }
++  (void)__builtin_std_embed(locus, status, size, illegal, 0, ptrc, offset, limit);
++  // { dg-error "argument 4 to '__builtin_std_embed' must be a pointer to a 'const' integer or enumeration type of sizeof and alignof equal to 1" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, illegal, ptrc, offset, limit);
++  // { dg-error "argument 5 to function '__builtin_std_embed' must be an integer type" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, illegal, offset, limit);
++  // { dg-error "argument 6 to function '__builtin_std_embed' must be a pointer to 'char', 'wchar_t',  or 'char8_t'" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, illegal, limit);
++  // { dg-error "argument 7 to function '__builtin_std_embed' must be an integral type" .-1 }
++  (void)__builtin_std_embed(locus, status, size, ptrc, 0, ptrc, offset, illegal);
++  // { dg-error "argument 8 to function '__builtin_std_embed' must be an integral type" .-1 }
++}
 diff --git a/gcc/tree-core.h b/gcc/tree-core.h
 index 07e9318f5e8..86c2e55576d 100644
 --- a/gcc/tree-core.h
@@ -5482,10 +5504,10 @@ index 017e980a964..8e2186dcdda 100644
  				  const unsigned char *);
  extern bool _cpp_save_file_entries (cpp_reader *pfile, FILE *f);
 diff --git a/libstdc++-v3/ChangeLog b/libstdc++-v3/ChangeLog
-index 44bf8d55eb5..2d72dca987b 100644
+index 299ee3ad307..6df6f1d0ea2 100644
 --- a/libstdc++-v3/ChangeLog
 +++ b/libstdc++-v3/ChangeLog
-@@ -172,6 +172,15 @@
+@@ -177,6 +177,15 @@
  	* testsuite/std/simd/traits_impl.cc: Added using declaration
  	for std::__constexpr_wrapper_like.
  
@@ -5501,7 +5523,7 @@ index 44bf8d55eb5..2d72dca987b 100644
  2026-04-22  Jakub Jelinek  <jakub@redhat.com>
  
  	* include/bits/version.def (reflection): Bump 202506L to 202603L
-@@ -2626,7 +2635,7 @@
+@@ -2631,7 +2640,7 @@
  	std::out_of_range::~out_of_range()): Likewise.  Also change
  	_GLIBCXX_NOTHROW to noexcept on those definitions.
  
@@ -5662,10 +5684,10 @@ index 62bc83f7ea1..48dd643eea7 100644
  #undef __glibcxx_want_all
 diff --git a/libstdc++-v3/include/std/embed b/libstdc++-v3/include/std/embed
 new file mode 100644
-index 00000000000..09da7a52cba
+index 00000000000..a0ba00f2e26
 --- /dev/null
 +++ b/libstdc++-v3/include/std/embed
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,278 @@
 +// <embed> -*- C++ -*-
 +
 +// Copyright The GNU Toolchain Authors.
@@ -5712,6 +5734,7 @@ index 00000000000..09da7a52cba
 +#include <string_view>
 +#include <cstddef>
 +#include <cassert>
++#include <type_traits>
 +
 +/* the version checking for C++29 is not yet ready; we cannot rely solely on
 +   __cpp_lib_embed right now and instead only provide a check
@@ -5757,6 +5780,10 @@ index 00000000000..09da7a52cba
 +	    [[maybe_unused]] const optional<size_t>& __limit)
 +    noexcept
 +    {
++      static_assert(is_same<_By, byte> || is_same<_By, char>
++		    || is_same<_By, unsigned char>,
++		    "embed type must be unqualified 'char', 'unsigned char', "
++		    "or 'std::byte'");
 +      int __status = -1;
 +      _By const* __ptr = nullptr;
 +      size_t __size = 0;
@@ -5781,17 +5808,18 @@ index 00000000000..09da7a52cba
 +	}
 +      if (__status == __file_not_found)
 +	{
-+	  _EMBED_FAIL("the file was not found");
++	  _EMBED_FAIL("file not found");
 +	}
 +      if (__status == __file_found_no_depends)
 +	{
-+	  _EMBED_FAIL("file not covered by a '#depend' directive");
++	  _EMBED_FAIL("file found but not appropriately '#depend ...'ed on");
 +	}
 +      if constexpr (_Ex != dynamic_extent)
 +	{
 +	  if (_Ex > __size)
 +	    {
-+	      _EMBED_FAIL("extent is larger than the file's size");
++	      _EMBED_FAIL("the fixed-size span extent is larger than the "
++			  "resource data size");
 +	    }
 +	  __size = _Ex;
 +	}
@@ -5938,43 +5966,141 @@ index 00000000000..09da7a52cba
 +
 +#endif // __cpp_lib_embed
 +#endif // _GLIBCXX_EMBED
-diff --git a/libstdc++-v3/testsuite/std/embed/mandates.cc b/libstdc++-v3/testsuite/std/embed/mandates.cc
+diff --git a/libstdc++-v3/testsuite/std/embed/a.txt b/libstdc++-v3/testsuite/std/embed/a.txt
+new file mode 100644
+index 00000000000..78981922613
+--- /dev/null
++++ b/libstdc++-v3/testsuite/std/embed/a.txt
+@@ -0,0 +1 @@
++a
+diff --git a/libstdc++-v3/testsuite/std/embed/empty b/libstdc++-v3/testsuite/std/embed/empty
 new file mode 100644
 index 00000000000..e69de29bb2d
-diff --git a/libstdc++-v3/testsuite/std/embed/nodiscard.cc b/libstdc++-v3/testsuite/std/embed/nodiscard.cc
+diff --git a/libstdc++-v3/testsuite/std/embed/mandates.cc b/libstdc++-v3/testsuite/std/embed/mandates.cc
 new file mode 100644
-index 00000000000..a2debe418b1
+index 00000000000..4f3b8cac035
 --- /dev/null
-+++ b/libstdc++-v3/testsuite/std/embed/nodiscard.cc
-@@ -0,0 +1,25 @@
++++ b/libstdc++-v3/testsuite/std/embed/mandates.cc
+@@ -0,0 +1,26 @@
 +// { dg-do compile { target c++2d } }
-+// { dg-require-cpp-feature-test "__cpp_lib_text_encoding" }
++// { dg-require-cpp-feature-test "__cpp_lib_embed" }
 +
 +#define STR_PREFIX_(a, b) a##b
 +#define STR_PREFIX(a, b) STR_PREFIX_(a, b)
 +
-+consteval void test() {
-+#if TEST_STD_VER >= 23
++#include <embed>
++
++consteval bool test()
++{
++  (void)std::embed<signed char>(__FILE__);
++  // { dg-error "embed type must be unqualified 'char', 'unsigned char', or 'std::byte'" .-1 }
++  (void)std::embed("praise the sun!");
++  // { dg-error "file not found" .-1 }
++  (void)std::embed<signed char>("a.txt");
++  // { dg-error "file found but not appropriately '#depend ...'ed on" .-1 }
++  (void)std::embed<1234>("a.txt");
++  // { dg-error "the fixed-size span extent is larger than the resource data size" .-1 }
++  return true;
++}
++
++int main (int, char*[])
++{
++  static_assert(test());
++  return 0;
++}
+diff --git a/libstdc++-v3/testsuite/std/embed/nodiscard.cc b/libstdc++-v3/testsuite/std/embed/nodiscard.cc
+new file mode 100644
+index 00000000000..42c012ea979
+--- /dev/null
++++ b/libstdc++-v3/testsuite/std/embed/nodiscard.cc
+@@ -0,0 +1,33 @@
++// { dg-do compile { target c++2d } }
++// { dg-require-cpp-feature-test "__cpp_lib_embed" }
++
++#define STR_PREFIX_(a, b) a##b
++#define STR_PREFIX(a, b) STR_PREFIX_(a, b)
++
++#include <embed>
++
++consteval bool test()
++{
 +  // make sure to test each individual overload
 +  std::embed(__FILE__);
-+  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  // { dg-warning "ignoring return value of function declared with 'nodiscard' attribute" .-1 }
 +  std::embed<1>(__FILE__);
-+  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  // { dg-warning "ignoring return value of function declared with 'nodiscard' attribute" .-1 }
 +
 +  std::embed(STR_PREFIX(L, __FILE__));
-+  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  // { dg-warning "ignoring return value of function declared with 'nodiscard' attribute" .-1 }
 +  std::embed<1>(STR_PREFIX(L, __FILE__));
-+  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  // { dg-warning "ignoring return value of function declared with 'nodiscard' attribute" .-1 }
 +
 +  std::embed(STR_PREFIX(u8, __FILE__));
-+  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
++  // { dg-warning "ignoring return value of function declared with 'nodiscard' attribute" .-1 }
 +  std::embed<1>(STR_PREFIX(u8, __FILE__));
-+  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
-+#endif
++  // { dg-warning "ignoring return value of function declared with 'nodiscard' attribute" .-1 }
++  return true;
++}
++
++int main (int, char*[])
++{
++  static_assert(test());
++  return 0;
 +}
 diff --git a/libstdc++-v3/testsuite/std/embed/post-conditions.cc b/libstdc++-v3/testsuite/std/embed/post-conditions.cc
 new file mode 100644
-index 00000000000..e69de29bb2d
+index 00000000000..21b140f1a20
+--- /dev/null
++++ b/libstdc++-v3/testsuite/std/embed/post-conditions.cc
+@@ -0,0 +1,48 @@
++// { dg-do compile { target c++2d } }
++// { dg-require-cpp-feature-test "__cpp_lib_embed" }
++
++#depend __FILE__
++#depend "a"
++#depend "empty"
++
++#include <embed>
++
++consteval bool test()
++{
++  constexpr auto v0 = std::embed("a.txt");
++  static_assert(v0.data() != nullptr);
++  static_assert(v0.size() == 1);
++  static_assert(v0[0] == (std::byte)u8'a');
++
++  constexpr auto v1 = std::embed(__FILE__);
++  static_assert(v1.data() == nullptr);
++  static_assert(v1.size() == 0);
++
++  constexpr auto v2 = std::embed(__FILE__, 0x123456);
++  static_assert(v2.data() == nullptr);
++  static_assert(v2.size() == 0);
++
++  constexpr auto v3 = std::embed(__FILE__, 0, 0);
++  static_assert(v3.data() == nullptr);
++  static_assert(v3.size() == 0);
++
++  constexpr auto v4 = std::embed<0>(__FILE__);
++  static_assert(v4.data() == nullptr);
++  static_assert(v4.size() == 0);
++
++  constexpr auto v5 = std::embed("empty");
++  static_assert(v5.data() == nullptr);
++  static_assert(v6.size() == 0);
++
++  constexpr auto v6 = std::embed(__FILE__, 3, 1);
++  static_assert(v6.size() == 1);
++  static_assert(v6[0] == (std::byte)u8'{');
++
++  return true;
++}
++
++int main (int, char*[])
++{
++  static_assert(test());
++  return 0;
++}
 -- 
 2.53.0
 

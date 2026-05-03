@@ -1,4 +1,4 @@
-From 9765313d945f6d10e8e3ffb12e0ff7177f7d9f7f Mon Sep 17 00:00:00 2001
+From b4bf106b37fb246c27c111ab316d68d2e3311290 Mon Sep 17 00:00:00 2001
 From: ThePhD <phdofthehouse@gmail.com>
 Date: Wed, 1 Apr 2026 19:06:16 +0200
 Subject: [PATCH] =?UTF-8?q?[clang][Lex][Sema]=20=E2=9C=A8=20Full=20std::em?=
@@ -23,7 +23,6 @@ Content-Transfer-Encoding: 8bit
 - [clang] 🎨 apply clang-format
 
 Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
-Signed-off-by: ThePhD <phdofthehouse@gmail.com>
 ---
  clang/docs/CommandGuide/clang.rst             |    8 +
  clang/docs/LanguageExtensions.rst             |   93 +
@@ -66,7 +65,7 @@ Signed-off-by: ThePhD <phdofthehouse@gmail.com>
  .../consteval-builtin-std-embed-art.cpp       |  198 ++
  .../consteval-builtin-std-embed-errors.cpp    |   40 +
  ...consteval-builtin-std-embed-local_file.cpp |   73 +
- .../SemaCXX/consteval-builtin-std-embed.cpp   |  186 ++
+ .../SemaCXX/consteval-builtin-std-embed.cpp   |  192 ++
  .../clang-import-test/clang-import-test.cpp   |    2 +
  clang/unittests/Lex/PPCallbacksTest.cpp       |    1 +
  clang/www/OpenProjects.html                   |    2 +-
@@ -82,9 +81,9 @@ Signed-off-by: ThePhD <phdofthehouse@gmail.com>
  libcxx/include/embed                          |  175 ++
  libcxx/include/version                        |    5 +
  libcxx/test/std/embed/a.txt                   |    1 +
- .../test/std/embed/embed-mandates.verify.cpp  |   34 +
- .../test/std/embed/embed-nodiscard.verify.cpp |   43 +
- .../std/embed/embed-post-conditions.pass.cpp  |   50 +
+ .../test/std/embed/embed-mandates.verify.cpp  |   37 +
+ .../test/std/embed/embed-nodiscard.verify.cpp |   49 +
+ .../std/embed/embed-post-conditions.pass.cpp  |   61 +
  libcxx/test/std/embed/empty                   |    0
  .../algorithm.version.compile.pass.cpp        |  108 +-
  .../any.version.compile.pass.cpp              |   13 +-
@@ -163,7 +162,7 @@ Signed-off-by: ThePhD <phdofthehouse@gmail.com>
  .../vector.version.compile.pass.cpp           |   61 +-
  .../version.version.compile.pass.cpp          | 2035 ++++++++++++++++-
  .../generate_feature_test_macro_components.py |    7 +-
- 138 files changed, 7331 insertions(+), 247 deletions(-)
+ 138 files changed, 7357 insertions(+), 247 deletions(-)
  create mode 100644 clang/include/clang/Basic/InputDependencyCollection.h
  create mode 100644 clang/include/clang/Basic/ResourceSearch.h
  create mode 100644 clang/lib/Basic/InputDependencyCollection.cpp
@@ -314,10 +313,10 @@ index e2e98604008e..5d6919d2eab8 100644
  ------------------
  Clang provides builtins to support checking and adjusting alignment of
 diff --git a/clang/docs/ReleaseNotes.rst b/clang/docs/ReleaseNotes.rst
-index fdafc4871ed1..2690b0df0c08 100644
+index 2c1d0d22dfa1..0bcf655c925d 100644
 --- a/clang/docs/ReleaseNotes.rst
 +++ b/clang/docs/ReleaseNotes.rst
-@@ -141,6 +141,9 @@ C++ Language Changes
+@@ -144,6 +144,9 @@ C++ Language Changes
  
  - ``__is_trivially_equality_comparable`` no longer returns false for all enum types. (#GH132672)
  
@@ -2538,10 +2537,10 @@ index 000000000000..dc9cfa3932c4
 +static_assert(local_file());
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed.cpp
 new file mode 100644
-index 000000000000..2c6a836ec324
+index 000000000000..4b8352ed896d
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed.cpp
-@@ -0,0 +1,186 @@
+@@ -0,0 +1,192 @@
 +// RUN: %clang_cc1 -std=c++20 -fsyntax-only -Wno-c++2d-extensions -Wno-c++23-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++23 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
 +// RUN: %clang_cc1 -std=c++26 -fsyntax-only -Wno-c++2d-extensions --embed-dir=%S/Inputs %s
@@ -2549,6 +2548,9 @@ index 000000000000..2c6a836ec324
 +// expected-no-diagnostics
 +
 +#depend "resources/**"
++
++#define STR_PREFIX_(a, b) a##b
++#define STR_PREFIX(a, b) STR_PREFIX_(a, b)
 +
 +namespace std {
 +  enum class byte : unsigned char {};
@@ -2640,41 +2642,41 @@ index 000000000000..2c6a836ec324
 +}
 +
 +consteval bool not_depended_on () {
-+  constexpr auto v0 = local_lookup_core<unsigned char>("consteval-builtin-std-embed.cpp");
++  constexpr auto v0 = local_lookup_core<unsigned char>( __FILE__);
 +  static_assert(v0.status == no_depend);
 +  static_assert(v0.ptr == nullptr);
 +  static_assert(v0.size == sentinel_size);
-+  constexpr auto v1 = local_lookup_core<unsigned char>(L"consteval-builtin-std-embed.cpp");
++  constexpr auto v1 = local_lookup_core<unsigned char>(STR_PREFX(L, __FILE__));
 +  static_assert(v1.status == no_depend);
 +  static_assert(v1.ptr == nullptr);
 +  static_assert(v1.size == sentinel_size);
-+  constexpr auto v2 = local_lookup_core<unsigned char>(u8"consteval-builtin-std-embed.cpp");
++  constexpr auto v2 = local_lookup_core<unsigned char>(STR_PREFX(u8, __FILE__));
 +  static_assert(v2.status == no_depend);
 +  static_assert(v2.ptr == nullptr);
 +  static_assert(v2.size == sentinel_size);
 +
-+  constexpr auto v3 = local_lookup_core<char>("consteval-builtin-std-embed.cpp");
++  constexpr auto v3 = local_lookup_core<char>( __FILE__);
 +  static_assert(v3.status == no_depend);
 +  static_assert(v3.ptr == nullptr);
 +  static_assert(v3.size == sentinel_size);
-+  constexpr auto v4 = local_lookup_core<char>(L"consteval-builtin-std-embed.cpp");
++  constexpr auto v4 = local_lookup_core<char>(STR_PREFX(L, __FILE__));
 +  static_assert(v4.status == no_depend);
 +  static_assert(v4.ptr == nullptr);
 +  static_assert(v4.size == sentinel_size);
-+  constexpr auto v5 = local_lookup_core<char>(u8"consteval-builtin-std-embed.cpp");
++  constexpr auto v5 = local_lookup_core<char>(STR_PREFX(u8, __FILE__));
 +  static_assert(v5.status == no_depend);
 +  static_assert(v5.ptr == nullptr);
 +  static_assert(v5.size == sentinel_size);
 +
-+  constexpr auto v6 = local_lookup_core<std::byte>("consteval-builtin-std-embed.cpp");
++  constexpr auto v6 = local_lookup_core<std::byte>( __FILE__);
 +  static_assert(v6.status == no_depend);
 +  static_assert(v6.ptr == nullptr);
 +  static_assert(v6.size == sentinel_size);
-+  constexpr auto v7 = local_lookup_core<std::byte>(L"consteval-builtin-std-embed.cpp");
++  constexpr auto v7 = local_lookup_core<std::byte>(STR_PREFX(L, __FILE__));
 +  static_assert(v7.status == no_depend);
 +  static_assert(v7.ptr == nullptr);
 +  static_assert(v7.size == sentinel_size);
-+  constexpr auto v8 = local_lookup_core<std::byte>(u8"consteval-builtin-std-embed.cpp");
++  constexpr auto v8 = local_lookup_core<std::byte>(STR_PREFX(u8, __FILE__));
 +  static_assert(v8.status == no_depend);
 +  static_assert(v8.ptr == nullptr);
 +  static_assert(v8.size == sentinel_size);
@@ -2724,6 +2726,9 @@ index 000000000000..2c6a836ec324
 +
 +  return true;
 +}
++
++#undef STR_PREFIX_
++#undef STR_PREFIX
 +
 +static_assert(does_not_exist());
 +static_assert(not_depended_on());
@@ -2918,7 +2923,7 @@ index 3137ba2ea27e..ebc197515960 100644
  // NOLINTEND(libcpp-cpp-version-check)
 diff --git a/libcxx/include/embed b/libcxx/include/embed
 new file mode 100644
-index 000000000000..3f08828e2e09
+index 000000000000..2de5df8923c6
 --- /dev/null
 +++ b/libcxx/include/embed
 @@ -0,0 +1,175 @@
@@ -3041,7 +3046,7 @@ index 000000000000..3f08828e2e09
 +  if (__status == __file_not_found) {
 +    _LIBCPP_VERBOSE_ABORT("file not found");
 +  } else if (__status == __file_found_no_depends) {
-+    _LIBCPP_VERBOSE_ABORT("file found but not appropriately '#depend <>'-ed on");
++    _LIBCPP_VERBOSE_ABORT("file found but not appropriately '#depend ...'ed on");
 +  }
 +  if constexpr (_Extent != std::dynamic_extent) {
 +    if (_Extent > __size) {
@@ -3129,10 +3134,10 @@ index 000000000000..78981922613b
 +a
 diff --git a/libcxx/test/std/embed/embed-mandates.verify.cpp b/libcxx/test/std/embed/embed-mandates.verify.cpp
 new file mode 100644
-index 000000000000..e6b9bbe97358
+index 000000000000..31d1db0e63b7
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-mandates.verify.cpp
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,37 @@
 +//===----------------------------------------------------------------------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -3151,7 +3156,7 @@ index 000000000000..e6b9bbe97358
 +
 +#include "test_macros.h"
 +
-+consteval void test() {
++consteval bool test() {
 +#if TEST_STD_VER >= 23
 +  // make sure to test each individual overload
 +  (void)std::embed<signed char>(__FILE__);
@@ -3159,20 +3164,23 @@ index 000000000000..e6b9bbe97358
 +  (void)std::embed("praise the sun!");
 +  // expected-error@-1 {{file not found}}
 +  (void)std::embed<signed char>("a.txt");
-+  // expected-error@-1 {{file found but not appropriately '#depend <>'-ed on}}
++  // expected-error@-1 {{file found but not appropriately '#depend ...'ed on}}
 +  (void)std::embed<1234>("a.txt");
 +  // expected-error@-1 {{the fixed-size span extent is larger than the resource data size}}
 +#endif
++  return true;
 +}
 +
-+#undef STR_PREFIX_
-+#undef STR_PREFIX
++int main (int, char*[]) {
++  static_assert(test());
++  return 0;
++}
 diff --git a/libcxx/test/std/embed/embed-nodiscard.verify.cpp b/libcxx/test/std/embed/embed-nodiscard.verify.cpp
 new file mode 100644
-index 000000000000..9381ea53b165
+index 000000000000..1b05dcab0d85
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-nodiscard.verify.cpp
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,49 @@
 +//===----------------------------------------------------------------------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -3194,7 +3202,7 @@ index 000000000000..9381ea53b165
 +#define STR_PREFIX_(a, b) a##b
 +#define STR_PREFIX(a, b) STR_PREFIX_(a, b)
 +
-+consteval void test() {
++consteval bool test() {
 +#if TEST_STD_VER >= 23
 +  // make sure to test each individual overload
 +  std::embed(__FILE__);
@@ -3212,16 +3220,22 @@ index 000000000000..9381ea53b165
 +  std::embed<1>(STR_PREFIX(u8, __FILE__));
 +  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
 +#endif
++  return true;
 +}
 +
 +#undef STR_PREFIX_
 +#undef STR_PREFIX
++
++int main (int, char*[]) {
++  static_assert(test());
++  return 0;
++}
 diff --git a/libcxx/test/std/embed/embed-post-conditions.pass.cpp b/libcxx/test/std/embed/embed-post-conditions.pass.cpp
 new file mode 100644
-index 000000000000..32d164dc47ed
+index 000000000000..682970c2f38e
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-post-conditions.pass.cpp
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,61 @@
 +//===----------------------------------------------------------------------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -3244,7 +3258,7 @@ index 000000000000..32d164dc47ed
 +
 +#include "test_macros.h"
 +
-+consteval void main(int, char*[]) {
++consteval bool test() {
 +#if TEST_STD_VER >= 23
 +  constexpr auto v0 = std::embed("a.txt");
 +  static_assert(v0.data() != nullptr);
@@ -3267,11 +3281,22 @@ index 000000000000..32d164dc47ed
 +  static_assert(v4.data() == nullptr);
 +  static_assert(v4.size() == 0);
 +
-+  constexpr auto v4 = std::embed("empty");
-+  static_assert(v4.data() == nullptr);
-+  static_assert(v4.size() == 0);
++  constexpr auto v5 = std::embed("empty");
++  static_assert(v5.data() == nullptr);
++  static_assert(v5.size() == 0);
++
++  constexpr auto v6 = std::embed(__FILE__, 3, 1);
++  static_assert(v6.size() == 1);
++  static_assert(v6[0] == (std::byte)u8'=');
 +#endif
++  return true;
 +}
++
++int main (int, char*[]) {
++  static_assert(test());
++  return 0;
++}
++
 diff --git a/libcxx/test/std/embed/empty b/libcxx/test/std/embed/empty
 new file mode 100644
 index 000000000000..e69de29bb2d1
@@ -9890,5 +9915,5 @@ index 3770f026009c..30ff46eb8d67 100644
  
  
 -- 
-2.54.0
+2.53.0.windows.3
 
