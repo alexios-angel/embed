@@ -90,28 +90,27 @@ namespace phd {
 		};
 
 		template <typename _Ty, ::std::size_t _Extent, typename _StrView>
-		inline consteval ::std::span<const _Ty, _Extent>
-		__embed(const _StrView& __resource_name, ::std::size_t __offset,
-		        const ::std::optional<::std::size_t>& __limit) noexcept {
-			static_assert((::std::is_integral_v<_Ty> || ::std::is_enum_v<_Ty>) && alignof(_Ty) == 1
-			                   && sizeof(_Ty) == 1,
-			              "Type must have sizeof(T) == 1, alignof(T) == 1, and it must be an integral or "
-			              "enumeration type");
+		inline consteval ::std::span<const _Ty, _Extent> __embed(const _StrView& __resource_name,
+		     ::std::size_t __offset, const ::std::optional<::std::size_t>& __limit) noexcept {
+			static_assert(
+			     (::std::is_integral_v<_Ty> || ::std::is_enum_v<_Ty>) && alignof(_Ty) == 1 && sizeof(_Ty) == 1,
+			     "Type must have sizeof(T) == 1, alignof(T) == 1, and it must be an integral or "
+			     "enumeration type");
 			int __status     = -1;
 			const _Ty* __res = nullptr;
 			size_t __res_len = 0;
 			if constexpr (_Extent != ::std::dynamic_extent) {
 				__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
-				                            __resource_name.data(), __offset, _Extent);
+				     __resource_name.data(), __offset, _Extent);
 			}
 			else {
 				if (__limit) {
 					__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
-					                            __resource_name.data(), __offset, *__limit);
+					     __resource_name.data(), __offset, *__limit);
 				}
 				else {
 					__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
-					                            __resource_name.data(), __offset);
+					     __resource_name.data(), __offset);
 				}
 			}
 			if (__status == __file_not_found) {
@@ -138,44 +137,49 @@ namespace phd {
 	} // namespace __detail
 
 	template <typename _Ty = std::byte>
+	[[nodiscard]]
 	inline constexpr ::std::span<const _Ty> embed(::std::string_view __resource_name, ::std::size_t __offset = 0,
-	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	     ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
 	template <typename _Ty = std::byte>
+	[[nodiscard]]
 	inline consteval ::std::span<const _Ty> embed(::std::wstring_view __resource_name, ::std::size_t __offset = 0,
-	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	     ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
 #ifdef __cpp_char8_t
 
 	template <typename _Ty = ::std::byte>
+	[[nodiscard]]
 	inline consteval ::std::span<const _Ty> embed(::std::u8string_view __resource_name, ::std::size_t __offset = 0,
-	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	     ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
 #endif // char8_t shenanigans
 
 	template <::std::size_t _Extent, typename _Ty = ::std::byte>
-	inline constexpr ::std::span<const _Ty, _Extent> embed(::std::string_view __resource_name,
-	                                                       ::std::size_t __offset = 0) noexcept {
+	[[nodiscard]]
+	inline constexpr ::std::span<const _Ty, _Extent> embed(
+	     ::std::string_view __resource_name, ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 
 	template <::std::size_t _Extent, typename _Ty = ::std::byte>
-	inline consteval ::std::span<const _Ty, _Extent> embed(::std::wstring_view __resource_name,
-	                                                       ::std::size_t __offset = 0) noexcept {
+	inline consteval ::std::span<const _Ty, _Extent> embed(
+	     ::std::wstring_view __resource_name, ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 
 #ifdef __cpp_char8_t
 
 	template <::std::size_t _Extent, typename _Ty = ::std::byte>
-	inline consteval ::std::span<const _Ty, _Extent> embed(::std::u8string_view __resource_name,
-	                                                       ::std::size_t __offset = 0) noexcept {
+	[[nodiscard]]
+	inline consteval ::std::span<const _Ty, _Extent> embed(
+	     ::std::u8string_view __resource_name, ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 
