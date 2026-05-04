@@ -2,7 +2,7 @@
 // | phd::embed |
 //   ----------
 
-// Written in 2026 by ThePhD <phdofthehouse@gmail.com>
+// Written in 2026 by Björkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
 
 // To the extent possible under law, the author(s) have dedicated all copyright and related
 // and neighboring rights to this software to the public domain worldwide. This software is
@@ -36,15 +36,31 @@
 #include <version>
 #endif // <version> check
 
-#if !defined(PHD_EMBED_HAS_BUILTIN_STD_EMBED)
-#if PHD_EMBED_HAS_BUILTIN(__builtin_std_embed)
-#define PHD_EMBED_HAS_BUILTIN_STD_EMBED 1
+#if defined(PHD_EMBED_HAS_BUILTIN_STD_EMBED)
+#if PHD_EMBED_HAS_BUILTIN_STD_EMBED != 0
+#define PHD_EMBED_HAS_BUILTIN_STD_EMBED_I 1
 #else
-#define PHD_EMBED_HAS_BUILTIN_STD_EMBED 0
+#define PHD_EMBED_HAS_BUILTIN_STD_EMBED_I 0
+#endif
+#elif PHD_EMBED_HAS_BUILTIN(__builtin_std_embed)
+#define PHD_EMBED_HAS_BUILTIN_STD_EMBED_I 1
+#else
+#define PHD_EMBED_HAS_BUILTIN_STD_EMBED_I 0
 #endif // __has_builtin test
-#endif // undefined PHD_EMBED_HAS_BUILTIN_STD_EMBED
 
-#if (defined(__cpp_lib_embed) && (__cpp_lib_embed >= 202606L)) && PHD_EMBED_HAS_INCLUDE(<embed>)
+#if defined(PHD_USE_STD_EMBED)
+#if PHD_USE_STD_EMBED != 0
+#define PHD_USE_STD_EMBED_I 1
+#else
+#define PHD_USE_STD_EMBED_I 0
+#endif
+#elif (defined(__cpp_lib_embed) && (__cpp_lib_embed >= 202606L)) && PHD_EMBED_HAS_INCLUDE(<embed>)
+#define PHD_USE_STD_EMBED_I 1
+#else
+#define PHD_USE_STD_EMBED_I 0
+#endif
+
+#if PHD_USE_EMBED_I == 1
 
 #include <embed>
 
@@ -54,7 +70,7 @@ namespace phd { inline namespace v0 {
 
 }} // namespace phd::v0
 
-#elif (PHD_EMBED_HAS_BUILTIN_STD_EMBED != 0)
+#elif (PHD_EMBED_HAS_BUILTIN_STD_EMBED_I != 0)
 
 #include <cstddef>
 #include <span>
@@ -62,6 +78,7 @@ namespace phd { inline namespace v0 {
 #include <string_view>
 #include <optional>
 #include <cassert>
+#include <cstdlib>
 
 #if PHD_EMBED_HAS_BUILTIN(__builtin_abort)
 #define PHD_EMBED_VERBOSE_ABORT(...) \
@@ -90,27 +107,34 @@ namespace phd {
 		};
 
 		template <typename _Ty, ::std::size_t _Extent, typename _StrView>
-		inline consteval ::std::span<const _Ty, _Extent> __embed(const _StrView& __resource_name,
-		     ::std::size_t __offset, const ::std::optional<::std::size_t>& __limit) noexcept {
+		inline consteval ::std::span<const _Ty, _Extent>
+		__embed(const _StrView& __resource_name, ::std::size_t __offset,
+		        const ::std::optional<::std::size_t>& __limit) noexcept {
+#if 0
 			static_assert(
 			     (::std::is_integral_v<_Ty> || ::std::is_enum_v<_Ty>) && alignof(_Ty) == 1 && sizeof(_Ty) == 1,
 			     "Type must have sizeof(T) == 1, alignof(T) == 1, and it must be an integral or "
 			     "enumeration type");
+#else
+			static_assert(::std::is_same_v<_Ty, unsigned char> || ::std::is_same_v<_Ty, char>
+			                   || ::std::is_same_v<_Ty, ::std::byte>,
+			              "Type must be either 'char', 'unsigned char', or 'std::byte'");
+#endif
 			int __status     = -1;
 			const _Ty* __res = nullptr;
 			size_t __res_len = 0;
 			if constexpr (_Extent != ::std::dynamic_extent) {
 				__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
-				     __resource_name.data(), __offset, _Extent);
+				                            __resource_name.data(), __offset, _Extent);
 			}
 			else {
 				if (__limit) {
 					__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
-					     __resource_name.data(), __offset, *__limit);
+					                            __resource_name.data(), __offset, *__limit);
 				}
 				else {
 					__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
-					     __resource_name.data(), __offset);
+					                            __resource_name.data(), __offset);
 				}
 			}
 			if (__status == __file_not_found) {
@@ -139,14 +163,14 @@ namespace phd {
 	template <typename _Ty = std::byte>
 	[[nodiscard]]
 	inline constexpr ::std::span<const _Ty> embed(::std::string_view __resource_name, ::std::size_t __offset = 0,
-	     ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
 	template <typename _Ty = std::byte>
 	[[nodiscard]]
 	inline consteval ::std::span<const _Ty> embed(::std::wstring_view __resource_name, ::std::size_t __offset = 0,
-	     ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
@@ -155,7 +179,7 @@ namespace phd {
 	template <typename _Ty = ::std::byte>
 	[[nodiscard]]
 	inline consteval ::std::span<const _Ty> embed(::std::u8string_view __resource_name, ::std::size_t __offset = 0,
-	     ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
+	                                              ::std::optional<::std::size_t> __limit = ::std::nullopt) noexcept {
 		return __detail::__embed<_Ty, ::std::dynamic_extent>(::std::move(__resource_name), __offset, __limit);
 	}
 
@@ -163,14 +187,14 @@ namespace phd {
 
 	template <::std::size_t _Extent, typename _Ty = ::std::byte>
 	[[nodiscard]]
-	inline constexpr ::std::span<const _Ty, _Extent> embed(
-	     ::std::string_view __resource_name, ::std::size_t __offset = 0) noexcept {
+	inline constexpr ::std::span<const _Ty, _Extent> embed(::std::string_view __resource_name,
+	                                                       ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 
 	template <::std::size_t _Extent, typename _Ty = ::std::byte>
-	inline consteval ::std::span<const _Ty, _Extent> embed(
-	     ::std::wstring_view __resource_name, ::std::size_t __offset = 0) noexcept {
+	inline consteval ::std::span<const _Ty, _Extent> embed(::std::wstring_view __resource_name,
+	                                                       ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 
@@ -178,8 +202,8 @@ namespace phd {
 
 	template <::std::size_t _Extent, typename _Ty = ::std::byte>
 	[[nodiscard]]
-	inline consteval ::std::span<const _Ty, _Extent> embed(
-	     ::std::u8string_view __resource_name, ::std::size_t __offset = 0) noexcept {
+	inline consteval ::std::span<const _Ty, _Extent> embed(::std::u8string_view __resource_name,
+	                                                       ::std::size_t __offset = 0) noexcept {
 		return __detail::__embed<_Ty, _Extent>(::std::move(__resource_name), __offset, ::std::nullopt);
 	}
 
@@ -189,7 +213,7 @@ namespace phd {
 
 #else
 
-#error "This compiler does not support the required <embed> functionality"
+#error This compiler does not support the required <embed>/__builtin_std_embed functionality
 
 #endif
 
