@@ -6,7 +6,7 @@
 #depend "resources/**"
 
 int main(int, char*[]) {
-	[[maybe_unused]] auto lua_code = ctlua::preprocessor("resources/lua/main.lua");
+	[[maybe_unused]] auto lua_code = ctlua::preprocess("resources/lua/main.lua");
 
 	//std::printf("original file (\"%s\"):\n\n%s", "resources/main.lua", original_file.data());
 	//std::printf("\n\n=================================================================================\n");

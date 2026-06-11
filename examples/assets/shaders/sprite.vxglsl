@@ -13,7 +13,6 @@ out vec2 return_tex;
 out vec4 return_color;
 
 void main(  ) {
-	// NO GODS NO MASTERS
 	gl_Position = return_position = ViewProjection * pos;
 	return_tex = tex;
 	return_color = color;

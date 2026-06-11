@@ -59,6 +59,7 @@ function(target_common_options target style)
 		-Wall
 		-Wpedantic
 		"--embed-dir=${CMAKE_SOURCE_DIR}/examples/assets"
+		"--embed-dir=${CMAKE_CURRENT_SOURCE_DIR}/resources"
 		"--embed-dir=${CMAKE_SOURCE_DIR}"
 	)
 	target_compile_definitions(${target}
@@ -77,12 +78,13 @@ function(target_common_options target style)
 	if (".c++" STREQUAL ${style})
 		target_compile_options(${target}
 			PRIVATE
-			-std=c++2c
+			-std=c++2d
 		)
 		if (${CMAKE_CXX_COMPILER_ID} MATCHES "[Cc]lang")
 			target_compile_options(${target}
 				PRIVATE
-				-Wno-c++2c-extensions
+				-Wno-c++2d-extensions
+				-Wno-c2y-extensions
 				-Wno-c23-extensions
 			)
 		endif()

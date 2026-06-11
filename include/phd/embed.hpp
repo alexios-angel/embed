@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <phd/make_static.hpp>
+
 #if !defined(PHD_EMBED_HAS_INCLUDE)
 #if defined(__has_include)
 #define PHD_EMBED_HAS_INCLUDE(...) __has_include(__VA_ARGS__)

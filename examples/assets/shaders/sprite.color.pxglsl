@@ -1,0 +1,8 @@
+#version 330 core
+
+#include "sprite.uniforms.pxglsl"
+#include "sprite.inouts.pxglsl"
+
+void main(  ) {
+	pixel_color = color;
+}
