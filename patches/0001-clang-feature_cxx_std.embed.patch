@@ -1,4 +1,4 @@
-From b4bf106b37fb246c27c111ab316d68d2e3311290 Mon Sep 17 00:00:00 2001
+From d0027bf99fe5a5db7e8ee02d73a92c00cc392a8e Mon Sep 17 00:00:00 2001
 From: ThePhD <phdofthehouse@gmail.com>
 Date: Wed, 1 Apr 2026 19:06:16 +0200
 Subject: [PATCH] =?UTF-8?q?[clang][Lex][Sema]=20=E2=9C=A8=20Full=20std::em?=
@@ -17,44 +17,54 @@ Content-Transfer-Encoding: 8bit
 - [clang][doc] 🐛 fix improper string and code quote sequences in builtin std embed documentation
 - [clang][AST][Sema] ✨ Add new locus argument to allow for any implementation to determine how many steps up they want to go in the constexpr callstack
 - [clang][AST][Sema][Frontend] Adjust the dependency file checking to output appropriate data
-- [libc++][clang-SemaCXX][clang-Preprocessor] ✅ Add a new tests
+- [libc++][clang-SemaCXX][clang-Preprocessor] ✅ Add new tests
 - [clang][Lex] 📝 It turns out Clang does not fully do Preprocessing before doing the rest of processing. That's a bit of a shame.
 - [clang][Frontend] ✨ C++2d flags for when Clang is finally ready
-- [clang] 🎨 apply clang-format
+- [clang] 🎨 apply clang-format and re-run generation files
 
 Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
 ---
  clang/docs/CommandGuide/clang.rst             |    8 +
- clang/docs/LanguageExtensions.rst             |   93 +
+ clang/docs/LanguageExtensions.rst             |   99 +
  clang/docs/ReleaseNotes.rst                   |    3 +
  clang/docs/ReleaseNotesTemplate.txt           |    3 +
  clang/include/clang/AST/ASTContext.h          |   15 +
+ clang/include/clang/AST/Expr.h                |   15 +-
  clang/include/clang/Basic/Builtins.td         |    7 +
  clang/include/clang/Basic/DiagnosticGroups.td |   14 +-
  .../include/clang/Basic/DiagnosticLexKinds.td |    3 +
  .../clang/Basic/DiagnosticSemaKinds.td        |    5 +
- .../clang/Basic/InputDependencyCollection.h   |   66 +
+ .../clang/Basic/InputDependencyCollection.h   |   72 +
  clang/include/clang/Basic/LangOptions.def     |    1 +
  clang/include/clang/Basic/LangStandard.h      |   28 +-
- clang/include/clang/Basic/LangStandards.def   |   17 +-
+ clang/include/clang/Basic/LangStandards.def   |   21 +-
  clang/include/clang/Basic/ResourceSearch.h    |   37 +
  clang/include/clang/Basic/TokenKinds.def      |    2 +
  clang/include/clang/Lex/PPCallbacks.h         |   18 +
  clang/include/clang/Lex/Preprocessor.h        |   11 +
- clang/include/clang/Sema/Sema.h               |    1 +
+ clang/include/clang/Parse/Parser.h            |    5 +
+ clang/include/clang/Sema/Sema.h               |   11 +-
  clang/lib/AST/ASTContext.cpp                  |   14 +
- clang/lib/AST/ExprConstant.cpp                |  329 ++-
+ clang/lib/AST/ASTImporter.cpp                 |    3 +-
+ clang/lib/AST/Expr.cpp                        |   14 +-
+ clang/lib/AST/ExprConstant.cpp                |  363 ++-
+ clang/lib/AST/StmtPrinter.cpp                 |    9 +-
  clang/lib/Basic/CMakeLists.txt                |    2 +
  clang/lib/Basic/IdentifierTable.cpp           |    1 +
- clang/lib/Basic/InputDependencyCollection.cpp |  191 ++
+ clang/lib/Basic/InputDependencyCollection.cpp |  241 ++
  clang/lib/Basic/LangOptions.cpp               |    1 +
- clang/lib/Basic/ResourceSearch.cpp            |  107 +
+ clang/lib/Basic/ResourceSearch.cpp            |  112 +
  clang/lib/Frontend/ASTUnit.cpp                |    8 +-
  clang/lib/Frontend/CompilerInstance.cpp       |    2 +
  clang/lib/Frontend/DependencyFile.cpp         |  101 +-
- clang/lib/Lex/PPDirectives.cpp                |  124 +-
+ clang/lib/Lex/PPDirectives.cpp                |  116 +-
  clang/lib/Lex/Preprocessor.cpp                |   32 +
+ clang/lib/Parse/ParseExpr.cpp                 |   26 +-
  clang/lib/Sema/SemaChecking.cpp               |  140 ++
+ clang/lib/Sema/SemaExpr.cpp                   |   30 +-
+ clang/lib/Sema/TreeTransform.h                |   11 +-
+ clang/lib/Serialization/ASTReaderStmt.cpp     |    1 +
+ clang/lib/Serialization/ASTWriterStmt.cpp     |    1 +
  clang/test/Driver/unknown-std.cpp             |    6 +-
  .../Inputs/media/nested/inside.txt            |    1 +
  .../test/Preprocessor/depend-dependencies.cpp |   11 +
@@ -66,6 +76,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../consteval-builtin-std-embed-errors.cpp    |   40 +
  ...consteval-builtin-std-embed-local_file.cpp |   73 +
  .../SemaCXX/consteval-builtin-std-embed.cpp   |  192 ++
+ clang/test/SemaCXX/source_location.cpp        |   31 +
  .../clang-import-test/clang-import-test.cpp   |    2 +
  clang/unittests/Lex/PPCallbacksTest.cpp       |    1 +
  clang/www/OpenProjects.html                   |    2 +-
@@ -75,17 +86,17 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  libcxx/docs/Status/Cxx2dIssues.csv            |    2 +
  libcxx/docs/Status/Cxx2dIssues.csvgb          |    0
  libcxx/docs/Status/Cxx2dPapers.csv            |    3 +
- libcxx/docs/index.rst                         |    2 +
  libcxx/include/CMakeLists.txt                 |    1 +
  libcxx/include/__configuration/language.h     |    6 +-
- libcxx/include/embed                          |  175 ++
- libcxx/include/version                        |    5 +
+ libcxx/include/embed                          |  268 +++
+ libcxx/include/version                        |    7 +
+ libcxx/modules/std.cppm.in                    |    1 +
  libcxx/test/std/embed/a.txt                   |    1 +
- .../test/std/embed/embed-mandates.verify.cpp  |   37 +
+ .../test/std/embed/embed-mandates.verify.cpp  |   35 +
  .../test/std/embed/embed-nodiscard.verify.cpp |   49 +
- .../std/embed/embed-post-conditions.pass.cpp  |   61 +
+ .../std/embed/embed-post-conditions.pass.cpp  |   63 +
  libcxx/test/std/embed/empty                   |    0
- .../algorithm.version.compile.pass.cpp        |  108 +-
+ .../algorithm.version.compile.pass.cpp        |  115 +-
  .../any.version.compile.pass.cpp              |   13 +-
  .../array.version.compile.pass.cpp            |   40 +-
  .../atomic.version.compile.pass.cpp           |   94 +-
@@ -103,7 +114,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../cstdlib.version.compile.pass.cpp          |   19 +-
  .../cstring.version.compile.pass.cpp          |   19 +-
  .../deque.version.compile.pass.cpp            |   47 +-
- .../embed.version.compile.pass.cpp            |   68 +
+ .../embed.version.compile.pass.cpp            |   74 +
  .../exception.version.compile.pass.cpp        |   13 +-
  .../execution.version.compile.pass.cpp        |   32 +-
  .../expected.version.compile.pass.cpp         |   33 +-
@@ -122,7 +133,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../limits.version.compile.pass.cpp           |   19 +-
  .../list.version.compile.pass.cpp             |   68 +-
  .../locale.version.compile.pass.cpp           |   19 +-
- .../map.version.compile.pass.cpp              |   94 +-
+ .../map.version.compile.pass.cpp              |  101 +-
  .../mdspan.version.compile.pass.cpp           |   46 +-
  .../memory.version.compile.pass.cpp           |  145 +-
  .../memory_resource.version.compile.pass.cpp  |   32 +-
@@ -135,7 +146,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../print.version.compile.pass.cpp            |   19 +-
  .../queue.version.compile.pass.cpp            |   27 +-
  .../random.version.compile.pass.cpp           |   32 +-
- .../ranges.version.compile.pass.cpp           |  127 +-
+ .../ranges.version.compile.pass.cpp           |  135 +-
  .../ratio.version.compile.pass.cpp            |   13 +-
  .../regex.version.compile.pass.cpp            |   13 +-
  .../scoped_allocator.version.compile.pass.cpp |   13 +-
@@ -143,7 +154,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../set.version.compile.pass.cpp              |   74 +-
  .../shared_mutex.version.compile.pass.cpp     |   32 +-
  .../source_location.version.compile.pass.cpp  |   13 +-
- .../span.version.compile.pass.cpp             |   38 +-
+ .../span.version.compile.pass.cpp             |   20 +-
  .../sstream.version.compile.pass.cpp          |   13 +-
  .../stack.version.compile.pass.cpp            |   20 +-
  .../stdatomic.h.version.compile.pass.cpp      |   13 +-
@@ -157,12 +168,12 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../typeinfo.version.compile.pass.cpp         |   13 +-
  .../unordered_map.version.compile.pass.cpp    |   94 +-
  .../unordered_set.version.compile.pass.cpp    |   74 +-
- .../utility.version.compile.pass.cpp          |  103 +-
+ .../utility.version.compile.pass.cpp          |  110 +-
  .../variant.version.compile.pass.cpp          |   33 +-
  .../vector.version.compile.pass.cpp           |   61 +-
- .../version.version.compile.pass.cpp          | 2035 ++++++++++++++++-
- .../generate_feature_test_macro_components.py |    7 +-
- 138 files changed, 7357 insertions(+), 247 deletions(-)
+ .../version.version.compile.pass.cpp          | 2063 ++++++++++++++++-
+ .../generate_feature_test_macro_components.py |   10 +-
+ 149 files changed, 7722 insertions(+), 277 deletions(-)
  create mode 100644 clang/include/clang/Basic/InputDependencyCollection.h
  create mode 100644 clang/include/clang/Basic/ResourceSearch.h
  create mode 100644 clang/lib/Basic/InputDependencyCollection.cpp
@@ -209,13 +220,27 @@ index d8c70bdc43b1..c4dcca3d093f 100644
  
   Supported values for the OpenCL language are:
 diff --git a/clang/docs/LanguageExtensions.rst b/clang/docs/LanguageExtensions.rst
-index e2e98604008e..5d6919d2eab8 100644
+index f378a73c20de..4eeea63cad9f 100644
 --- a/clang/docs/LanguageExtensions.rst
 +++ b/clang/docs/LanguageExtensions.rst
-@@ -5474,6 +5474,99 @@ manner as the above four builtins, except that ``_M_function_name`` is populated
+@@ -5433,6 +5433,8 @@ these builtins are also implemented by GCC.
+   unsigned    __builtin_LINE();
+   unsigned    __builtin_COLUMN(); // Clang only
+   const std::source_location::__impl *__builtin_source_location();
++  const std::source_location::__impl *__builtin_source_location(
++    unsigned long long distance); // Clang only
+ 
+ **Example of use**:
+ 
+@@ -5487,6 +5489,103 @@ defined, and must contain exactly four fields: ``const char *_M_file_name``,
+ manner as the above four builtins, except that ``_M_function_name`` is populated
  with ``__PRETTY_FUNCTION__`` rather than ``__FUNCTION__``.
  
- 
++The second overload of the builtin ``__builtin_source_location`` attempts to
++"walk" up the stack that many call stack locations in order retrieve that
++location. It is usable and only meaningful within constant evaluation.
++
++
 +Data embedding builtin ``__builtin_std_embed``
 +----------------------------------------------
 +
@@ -308,17 +333,16 @@ index e2e98604008e..5d6919d2eab8 100644
 +effort, and whether or not it is sunny outside right now. Block devices such
 +as ``/dev/urandom`` can possibly be supported in the future.
 +
-+
+ 
  Alignment builtins
  ------------------
- Clang provides builtins to support checking and adjusting alignment of
 diff --git a/clang/docs/ReleaseNotes.rst b/clang/docs/ReleaseNotes.rst
-index 2c1d0d22dfa1..0bcf655c925d 100644
+index 8a6eb2003e5f..0dfbb7a4f745 100644
 --- a/clang/docs/ReleaseNotes.rst
 +++ b/clang/docs/ReleaseNotes.rst
-@@ -144,6 +144,9 @@ C++ Language Changes
- 
+@@ -193,6 +193,9 @@ C++ Language Changes
  - ``__is_trivially_equality_comparable`` no longer returns false for all enum types. (#GH132672)
+ - ``auto`` parameters are now available in all C++ language modes as an extension.
  
 +C++2d Feature Support
 +^^^^^^^^^^^^^^^^^^^^^
@@ -341,7 +365,7 @@ index b5664dcf3b21..0c588c3b4f43 100644
  ^^^^^^^^^^^^^^^^^^^^^
  
 diff --git a/clang/include/clang/AST/ASTContext.h b/clang/include/clang/AST/ASTContext.h
-index c45d54fdd2e8..f93fb18bbf7d 100644
+index a4ed852d3644..8e72b4ad196f 100644
 --- a/clang/include/clang/AST/ASTContext.h
 +++ b/clang/include/clang/AST/ASTContext.h
 @@ -27,6 +27,7 @@
@@ -352,7 +376,7 @@ index c45d54fdd2e8..f93fb18bbf7d 100644
  #include "clang/Basic/LLVM.h"
  #include "clang/Basic/PartialDiagnostic.h"
  #include "clang/Basic/SourceLocation.h"
-@@ -132,6 +133,7 @@ class OMPTraitInfo;
+@@ -128,6 +129,7 @@ class OMPTraitInfo;
  class ParentMapContext;
  struct ParsedTargetAttr;
  class Preprocessor;
@@ -360,7 +384,7 @@ index c45d54fdd2e8..f93fb18bbf7d 100644
  class ProfileList;
  class StoredDeclsMap;
  class TargetAttr;
-@@ -568,6 +570,10 @@ class ASTContext : public RefCountedBase<ASTContext> {
+@@ -565,6 +567,10 @@ class ASTContext : public RefCountedBase<ASTContext> {
    // A mapping from Scalable Vector Type keys to their corresponding QualType.
    mutable llvm::DenseMap<llvm::ScalableVecTyKey, QualType> ScalableVecTyMap;
  
@@ -371,7 +395,7 @@ index c45d54fdd2e8..f93fb18bbf7d 100644
    ASTContext &this_() { return *this; }
  
  public:
-@@ -809,6 +815,8 @@ public:
+@@ -806,6 +812,8 @@ public:
    mutable DeclarationNameTable DeclarationNames;
    IntrusiveRefCntPtr<ExternalASTSource> ExternalSource;
    ASTMutationListener *Listener = nullptr;
@@ -380,7 +404,7 @@ index c45d54fdd2e8..f93fb18bbf7d 100644
  
    /// Returns the clang bytecode interpreter context.
    interp::Context &getInterpContext() const;
-@@ -1413,6 +1421,13 @@ public:
+@@ -1423,6 +1431,13 @@ public:
    ASTContext &operator=(const ASTContext &) = delete;
    ~ASTContext();
  
@@ -394,11 +418,57 @@ index c45d54fdd2e8..f93fb18bbf7d 100644
    /// Attach an external AST source to the AST context.
    ///
    /// The external AST source provides the ability to load parts of
+diff --git a/clang/include/clang/AST/Expr.h b/clang/include/clang/AST/Expr.h
+index eeac69cb1d0e..82f39f8ebce3 100644
+--- a/clang/include/clang/AST/Expr.h
++++ b/clang/include/clang/AST/Expr.h
+@@ -5016,23 +5016,27 @@ enum class SourceLocIdentKind {
+ 
+ /// Represents a function call to one of __builtin_LINE(), __builtin_COLUMN(),
+ /// __builtin_FUNCTION(), __builtin_FUNCSIG(), __builtin_FILE(),
+-/// __builtin_FILE_NAME() or __builtin_source_location().
++/// __builtin_FILE_NAME(), __builtin_source_location(), or
++/// __builtin_source_location(unsigned long long distance).
+ class SourceLocExpr final : public Expr {
+   SourceLocation BuiltinLoc, RParenLoc;
+   DeclContext *ParentContext;
++  Expr *CallStackDistance;
+ 
+ public:
+   SourceLocExpr(const ASTContext &Ctx, SourceLocIdentKind Type,
+                 QualType ResultTy, SourceLocation BLoc,
+-                SourceLocation RParenLoc, DeclContext *Context);
++                SourceLocation RParenLoc, DeclContext *Context,
++                Expr *CallStackDistance = nullptr);
+ 
+   /// Build an empty call expression.
+   explicit SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
+ 
+   /// Return the result of evaluating this SourceLocExpr in the specified
+   /// (and possibly null) default argument or initialization context.
+-  APValue EvaluateInContext(const ASTContext &Ctx,
+-                            const Expr *DefaultExpr) const;
++  APValue EvaluateInContext(
++      const ASTContext &Ctx, const Expr *DefaultExpr,
++      std::optional<SourceLocation> PrecomputedLoc = std::nullopt) const;
+ 
+   /// Return a string representing the name of the specific builtin function.
+   StringRef getBuiltinStr() const;
+@@ -5061,6 +5065,9 @@ public:
+   const DeclContext *getParentContext() const { return ParentContext; }
+   DeclContext *getParentContext() { return ParentContext; }
+ 
++  const Expr *getCallStackDistance() const { return CallStackDistance; }
++  Expr *getCallStackDistance() { return CallStackDistance; }
++
+   SourceLocation getLocation() const { return BuiltinLoc; }
+   SourceLocation getBeginLoc() const { return BuiltinLoc; }
+   SourceLocation getEndLoc() const { return RParenLoc; }
 diff --git a/clang/include/clang/Basic/Builtins.td b/clang/include/clang/Basic/Builtins.td
-index 4a7eaeb3d353..95f1a7e8f9e4 100644
+index 053a257ba6d4..f7a572e4f53d 100644
 --- a/clang/include/clang/Basic/Builtins.td
 +++ b/clang/include/clang/Basic/Builtins.td
-@@ -1269,6 +1269,13 @@ def GetVtablePointer : LangBuiltin<"CXX_LANG"> {
+@@ -1219,6 +1219,13 @@ def GetVtablePointer : LangBuiltin<"CXX_LANG"> {
    let Prototype = "void*(void*)";
  }
  
@@ -413,7 +483,7 @@ index 4a7eaeb3d353..95f1a7e8f9e4 100644
  def EHReturn : Builtin {
    let Spellings = ["__builtin_eh_return"];
 diff --git a/clang/include/clang/Basic/DiagnosticGroups.td b/clang/include/clang/Basic/DiagnosticGroups.td
-index 2b3055d6d6bd..b5d8fc7cd733 100644
+index 244cd3630bb1..c0f81bfb5630 100644
 --- a/clang/include/clang/Basic/DiagnosticGroups.td
 +++ b/clang/include/clang/Basic/DiagnosticGroups.td
 @@ -410,8 +410,9 @@ def CXXPre23CompatPedantic :
@@ -437,7 +507,7 @@ index 2b3055d6d6bd..b5d8fc7cd733 100644
  def ExitTimeDestructors : DiagGroup<"exit-time-destructors">;
  def FlexibleArrayExtensions : DiagGroup<"flexible-array-extensions">;
  def FourByteMultiChar : DiagGroup<"four-char-constants">;
-@@ -1526,12 +1529,17 @@ def CXX23 : DiagGroup<"c++23-extensions", [CXX23AttrsOnLambda]>;
+@@ -1572,12 +1575,17 @@ def CXX23 : DiagGroup<"c++23-extensions", [CXX23AttrsOnLambda]>;
  // earlier C++ versions.
  def CXX26 : DiagGroup<"c++26-extensions">;
  
@@ -457,10 +527,10 @@ index 2b3055d6d6bd..b5d8fc7cd733 100644
  def DelegatingCtorCycles :
    DiagGroup<"delegating-ctor-cycles">;
 diff --git a/clang/include/clang/Basic/DiagnosticLexKinds.td b/clang/include/clang/Basic/DiagnosticLexKinds.td
-index 85fa290de6fd..0e5ab7c7bfd9 100644
+index 383bf1a7fdb3..2fd3f3822664 100644
 --- a/clang/include/clang/Basic/DiagnosticLexKinds.td
 +++ b/clang/include/clang/Basic/DiagnosticLexKinds.td
-@@ -467,6 +467,8 @@ def warn_c23_compat_warning_directive : Warning<
+@@ -475,6 +475,8 @@ def warn_c23_compat_warning_directive : Warning<
  def ext_pp_embed_directive : ExtWarn<
    "#embed is a %select{C23|Clang}0 extension">,
    InGroup<C23>;
@@ -469,7 +539,7 @@ index 85fa290de6fd..0e5ab7c7bfd9 100644
  def warn_compat_pp_embed_directive : Warning<
    "#embed is incompatible with C standards before C23">,
    InGroup<CPre23Compat>, DefaultIgnore;
-@@ -582,6 +584,7 @@ def err_pp_including_mainfile_in_preamble : Error<
+@@ -590,6 +592,7 @@ def err_pp_including_mainfile_in_preamble : Error<
  def err_pp_empty_filename : Error<"empty filename">;
  def err_pp_include_too_deep : Error<"#include nested too deeply">;
  def err_pp_expects_filename : Error<"expected \"FILENAME\" or <FILENAME>">;
@@ -478,10 +548,10 @@ index 85fa290de6fd..0e5ab7c7bfd9 100644
  def err_pp_missing_macro_name : Error<"macro name missing">;
  def err_pp_missing_rparen_in_macro_def : Error<
 diff --git a/clang/include/clang/Basic/DiagnosticSemaKinds.td b/clang/include/clang/Basic/DiagnosticSemaKinds.td
-index 1302c4296885..bc9538751f7f 100644
+index f84cd8dca6d4..b020f431af68 100644
 --- a/clang/include/clang/Basic/DiagnosticSemaKinds.td
 +++ b/clang/include/clang/Basic/DiagnosticSemaKinds.td
-@@ -850,6 +850,11 @@ def err_builtin_definition : Error<"definition of builtin function %0">;
+@@ -852,6 +852,11 @@ def err_builtin_definition : Error<"definition of builtin function %0">;
  def err_builtin_redeclare : Error<"cannot redeclare builtin function %0">;
  def err_invalid_builtin_argument : Error<"invalid argument '%0' to %1">;
  
@@ -495,10 +565,10 @@ index 1302c4296885..bc9538751f7f 100644
    "%select{GCP|CDE}1">;
 diff --git a/clang/include/clang/Basic/InputDependencyCollection.h b/clang/include/clang/Basic/InputDependencyCollection.h
 new file mode 100644
-index 000000000000..d29a9e4192f3
+index 000000000000..8ca46f8d78a9
 --- /dev/null
 +++ b/clang/include/clang/Basic/InputDependencyCollection.h
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,72 @@
 +//===--- InputDependencyCollection.h - Searching for Resources --*- C++ -*-===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -544,7 +614,9 @@ index 000000000000..d29a9e4192f3
 +
 +  PatternFilter(std::string Input);
 +
-+  bool Check(StringRef Filename) const;
++  bool InputDependencyCheck(StringRef Input, StringRef EmbedDir,
++                            StringRef Filename, FileEntryRef Fileref) const;
++  bool SimpleInputDependencyCheck(StringRef Filename) const;
 +};
 +
 +class InputDependencyCollection {
@@ -560,13 +632,17 @@ index 000000000000..d29a9e4192f3
 +                     FileManager &FM,
 +                     const std::vector<std::string> &SearchEntries,
 +                     OptionalFileEntryRef LookupFrom);
-+  bool Check(llvm::StringRef Filename) const;
++
++  bool InputDependencyCheck(StringRef Input, StringRef EmbedDir,
++                            StringRef Filename,
++                            FileEntryRef MaybeFileref) const;
++  bool SimpleInputDependencyCheck(StringRef Filename) const;
 +};
 +} // namespace clang
 +
 +#endif
 diff --git a/clang/include/clang/Basic/LangOptions.def b/clang/include/clang/Basic/LangOptions.def
-index 596bce9e897f..5d685b9c9173 100644
+index 75267ffea941..176ee5d8a301 100644
 --- a/clang/include/clang/Basic/LangOptions.def
 +++ b/clang/include/clang/Basic/LangOptions.def
 @@ -57,6 +57,7 @@ LANGOPT(CPlusPlus17       , 1, 0, NotCompatible, "C++17")
@@ -624,7 +700,7 @@ index 1eef3a633929..7e9cf43bda33 100644
    bool hasDigraphs() const { return Flags & Digraphs; }
  
 diff --git a/clang/include/clang/Basic/LangStandards.def b/clang/include/clang/Basic/LangStandards.def
-index 4edc93503cdf..476c9ff55254 100644
+index 809240978d01..58c00a840418 100644
 --- a/clang/include/clang/Basic/LangStandards.def
 +++ b/clang/include/clang/Basic/LangStandards.def
 @@ -180,17 +180,30 @@ LANGSTANDARD_ALIAS_DEPR(gnucxx23, "gnu++2b")
@@ -634,27 +710,29 @@ index 4edc93503cdf..476c9ff55254 100644
 -             CXX, "Working draft for C++2c",
 +             CXX, "Working draft for C++26",
               LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
-              CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat, 202400)
+-             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat, 202400)
++             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat, 202606)
  LANGSTANDARD_ALIAS(cxx26, "c++26")
  
  LANGSTANDARD(gnucxx26, "gnu++2c",
 -             CXX, "Working draft for C++2c with GNU extensions",
 +             CXX, "Working draft for C++26 with GNU extensions",
               LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
-              CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat | GNUMode, 202400)
+-             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat | GNUMode, 202400)
++             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat | GNUMode, 202606)
  LANGSTANDARD_ALIAS(gnucxx26, "gnu++26")
  
 +// FIXME: Use correct version code for C++29 once published.
 +LANGSTANDARD(cxx29, "c++2d",
 +             CXX, "Working draft for C++2d",
 +             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
-+             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | CPlusPlus29 | Digraphs | HexFloat, 202604)
++             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | CPlusPlus29 | Digraphs | HexFloat, 202700)
 +LANGSTANDARD_ALIAS(cxx29, "c++29")
 +
 +LANGSTANDARD(gnucxx29, "gnu++2d",
 +             CXX, "Working draft for C++2d with GNU extensions",
 +             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
-+             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | CPlusPlus29 | Digraphs | HexFloat | GNUMode, 202604)
++             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | CPlusPlus29 | Digraphs | HexFloat | GNUMode, 202700)
 +LANGSTANDARD_ALIAS(gnucxx29, "gnu++29")
 +
  // OpenCL
@@ -662,7 +740,7 @@ index 4edc93503cdf..476c9ff55254 100644
               OpenCL, "OpenCL 1.0",
 diff --git a/clang/include/clang/Basic/ResourceSearch.h b/clang/include/clang/Basic/ResourceSearch.h
 new file mode 100644
-index 000000000000..3db353405b2c
+index 000000000000..094bd2bafb9b
 --- /dev/null
 +++ b/clang/include/clang/Basic/ResourceSearch.h
 @@ -0,0 +1,37 @@
@@ -691,20 +769,20 @@ index 000000000000..3db353405b2c
 +
 +class FileManager;
 +
-+OptionalFileEntryRef
-+LookupFileWithStdVec(StringRef Filename, bool isAngled, bool OpenFile,
-+                     FileManager &FM,
-+                     const std::vector<std::string> &SearchEntries,
-+                     OptionalFileEntryRef LookupFromFile);
++OptionalFileEntryRef LookupFileWithStdVec(
++    StringRef Filename, bool isAngled, bool OpenFile, FileManager &FM,
++    const std::vector<std::string> &SearchEntries,
++    OptionalFileEntryRef LookupFromFile, StringRef *FoundEntry = nullptr);
 +OptionalFileEntryRef LookupFileWith(StringRef Filename, bool isAngled,
 +                                    bool OpenFile, FileManager &FM,
 +                                    ArrayRef<StringRef> SearchEntries,
-+                                    OptionalFileEntryRef LookupFromFile);
++                                    OptionalFileEntryRef LookupFromFile,
++                                    StringRef *FoundEntry = nullptr);
 +} // namespace clang
 +
 +#endif
 diff --git a/clang/include/clang/Basic/TokenKinds.def b/clang/include/clang/Basic/TokenKinds.def
-index 005d81b5b928..c73127ab9d97 100644
+index f07d8ebb7503..a6dafffe5a3c 100644
 --- a/clang/include/clang/Basic/TokenKinds.def
 +++ b/clang/include/clang/Basic/TokenKinds.def
 @@ -132,6 +132,8 @@ PPKEYWORD(pragma)
@@ -717,7 +795,7 @@ index 005d81b5b928..c73127ab9d97 100644
  // C++20 Module Directive
  PPKEYWORD(module)
 diff --git a/clang/include/clang/Lex/PPCallbacks.h b/clang/include/clang/Lex/PPCallbacks.h
-index 51c6a31e143b..0d8e1375fd2c 100644
+index 2f62fa8d52b1..df0798391d49 100644
 --- a/clang/include/clang/Lex/PPCallbacks.h
 +++ b/clang/include/clang/Lex/PPCallbacks.h
 @@ -29,6 +29,7 @@ class MacroDefinition;
@@ -741,7 +819,7 @@ index 51c6a31e143b..0d8e1375fd2c 100644
    /// Callback invoked whenever a submodule was entered.
    ///
    /// \param M The submodule we have entered.
-@@ -543,6 +550,17 @@ public:
+@@ -565,6 +572,17 @@ public:
                                 SuggestedModule, ModuleImported, FileType);
    }
  
@@ -760,7 +838,7 @@ index 51c6a31e143b..0d8e1375fd2c 100644
                          bool ForPragma) override {
      First->EnteredSubmodule(M, ImportLoc, ForPragma);
 diff --git a/clang/include/clang/Lex/Preprocessor.h b/clang/include/clang/Lex/Preprocessor.h
-index 8830294ea165..9592f5b4a195 100644
+index 8b684e85eb1c..e373c953e8a3 100644
 --- a/clang/include/clang/Lex/Preprocessor.h
 +++ b/clang/include/clang/Lex/Preprocessor.h
 @@ -17,6 +17,7 @@
@@ -782,7 +860,7 @@ index 8830294ea165..9592f5b4a195 100644
    /// Returns a pointer into the given file's buffer that's guaranteed
    /// to be between tokens. The returned pointer is always before \p Start.
    /// The maximum distance betweenthe returned pointer and \p Start is
-@@ -1808,6 +1813,10 @@ public:
+@@ -1793,6 +1798,10 @@ public:
    /// Lex a token, forming a header-name token if possible.
    bool LexHeaderName(Token &Result, bool AllowMacroExpansion = true);
  
@@ -793,7 +871,7 @@ index 8830294ea165..9592f5b4a195 100644
    /// Lex the parameters for an #embed directive, returns nullopt on error.
    std::optional<LexEmbedParametersResult> LexEmbedParameters(Token &Current,
                                                               bool ForHasEmbed);
-@@ -2888,6 +2897,8 @@ private:
+@@ -2875,6 +2884,8 @@ private:
        const FileEntry *LookupFromFile, StringRef &LookupFilename,
        SmallVectorImpl<char> &RelativePath, SmallVectorImpl<char> &SearchPath,
        ModuleMap::KnownHeader &SuggestedModule, bool isAngled);
@@ -802,8 +880,52 @@ index 8830294ea165..9592f5b4a195 100644
    // Binary data inclusion
    void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok);
    void HandleEmbedDirectiveImpl(SourceLocation HashLoc,
+diff --git a/clang/include/clang/Parse/Parser.h b/clang/include/clang/Parse/Parser.h
+index 5e7af97feeb6..aed8b43971c1 100644
+--- a/clang/include/clang/Parse/Parser.h
++++ b/clang/include/clang/Parse/Parser.h
+@@ -3897,6 +3897,7 @@ private:
+   bool isRevertibleTypeTrait(const IdentifierInfo *Id,
+                              clang::tok::TokenKind *Kind = nullptr);
+ 
++  // clang-format off
+   /// Parse a cast-expression, or, if \pisUnaryExpression is true, parse
+   /// a unary-expression.
+   ///
+@@ -3967,6 +3968,7 @@ private:
+   /// [GNU]   '__builtin_LINE' '(' ')'
+   /// [CLANG] '__builtin_COLUMN' '(' ')'
+   /// [GNU]   '__builtin_source_location' '(' ')'
++  /// [CLANG] '__builtin_source_location' '(' assign-expr ')'
+   /// [GNU]   '__builtin_types_compatible_p' '(' type-name ',' type-name ')'
+   /// [GNU]   '__null'
+   /// [OBJC]  '[' objc-message-expr ']'
+@@ -4149,6 +4151,7 @@ private:
+   /// \endverbatim
+   ExprResult ParseUnaryExprOrTypeTraitExpression();
+ 
++  // clang-format off
+   /// ParseBuiltinPrimaryExpression
+   ///
+   /// \verbatim
+@@ -4165,6 +4168,7 @@ private:
+   /// [GNU]   '__builtin_LINE' '(' ')'
+   /// [CLANG] '__builtin_COLUMN' '(' ')'
+   /// [GNU]   '__builtin_source_location' '(' ')'
++  /// [CLANG] '__builtin_source_location' '(' assign-expr ')'
+   /// [OCL]   '__builtin_astype' '(' assignment-expression ',' type-name ')'
+   ///
+   /// [GNU] offsetof-member-designator:
+@@ -4172,6 +4176,7 @@ private:
+   /// [GNU]   offsetof-member-designator '.' identifier
+   /// [GNU]   offsetof-member-designator '[' expression ']'
+   /// \endverbatim
++  // clang-format on
+   ExprResult ParseBuiltinPrimaryExpression();
+ 
+   /// Parse a __builtin_sycl_unique_stable_name expression.  Accepts a type-id
 diff --git a/clang/include/clang/Sema/Sema.h b/clang/include/clang/Sema/Sema.h
-index 8f98e104d379..a5153e57b498 100644
+index b8d760e7e097..6c2e429bb654 100644
 --- a/clang/include/clang/Sema/Sema.h
 +++ b/clang/include/clang/Sema/Sema.h
 @@ -3053,6 +3053,7 @@ private:
@@ -814,11 +936,36 @@ index 8f98e104d379..a5153e57b498 100644
  
    // Matrix builtin handling.
    ExprResult BuiltinMatrixTranspose(CallExpr *TheCall, ExprResult CallResult);
+@@ -7672,10 +7673,11 @@ public:
+                             TypeSourceInfo *TInfo, SourceLocation RPLoc);
+ 
+   // __builtin_LINE(), __builtin_FUNCTION(), __builtin_FUNCSIG(),
+-  // __builtin_FILE(), __builtin_COLUMN(), __builtin_source_location()
++  // __builtin_FILE(), __builtin_COLUMN(), __builtin_source_location(),
++  // __builtin_source_location(unsigned distance)
+   ExprResult ActOnSourceLocExpr(SourceLocIdentKind Kind,
+-                                SourceLocation BuiltinLoc,
+-                                SourceLocation RPLoc);
++                                SourceLocation BuiltinLoc, SourceLocation RPLoc,
++                                Expr *CallStackDistance = nullptr);
+ 
+   // #embed
+   ExprResult ActOnEmbedExpr(SourceLocation EmbedKeywordLoc,
+@@ -7684,7 +7686,8 @@ public:
+   // Build a potentially resolved SourceLocExpr.
+   ExprResult BuildSourceLocExpr(SourceLocIdentKind Kind, QualType ResultTy,
+                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
+-                                DeclContext *ParentContext);
++                                DeclContext *ParentContext,
++                                Expr *CallStackDistance = nullptr);
+ 
+   // __null
+   ExprResult ActOnGNUNullExpr(SourceLocation TokenLoc);
 diff --git a/clang/lib/AST/ASTContext.cpp b/clang/lib/AST/ASTContext.cpp
-index a0894318dbd5..b469e3fc17f8 100644
+index abf0cd5e18c2..62b4b65dc51b 100644
 --- a/clang/lib/AST/ASTContext.cpp
 +++ b/clang/lib/AST/ASTContext.cpp
-@@ -903,6 +903,20 @@ ASTContext::ASTContext(LangOptions &LOpts, SourceManager &SM,
+@@ -953,6 +953,20 @@ ASTContext::ASTContext(LangOptions &LOpts, SourceManager &SM,
    addTranslationUnitDecl();
  }
  
@@ -839,8 +986,69 @@ index a0894318dbd5..b469e3fc17f8 100644
  void ASTContext::cleanup() {
    // Release the DenseMaps associated with DeclContext objects.
    // FIXME: Is this the ideal solution?
+diff --git a/clang/lib/AST/ASTImporter.cpp b/clang/lib/AST/ASTImporter.cpp
+index 567d2d07298a..73437bef46a8 100644
+--- a/clang/lib/AST/ASTImporter.cpp
++++ b/clang/lib/AST/ASTImporter.cpp
+@@ -7628,6 +7628,7 @@ ExpectedStmt ASTNodeImporter::VisitSourceLocExpr(SourceLocExpr *E) {
+   auto ToType = importChecked(Err, E->getType());
+   auto BLoc = importChecked(Err, E->getBeginLoc());
+   auto RParenLoc = importChecked(Err, E->getEndLoc());
++  auto CallStackDistance = importChecked(Err, E->getCallStackDistance());
+   if (Err)
+     return std::move(Err);
+   auto ParentContextOrErr = Importer.ImportContext(E->getParentContext());
+@@ -7636,7 +7637,7 @@ ExpectedStmt ASTNodeImporter::VisitSourceLocExpr(SourceLocExpr *E) {
+ 
+   return new (Importer.getToContext())
+       SourceLocExpr(Importer.getToContext(), E->getIdentKind(), ToType, BLoc,
+-                    RParenLoc, *ParentContextOrErr);
++                    RParenLoc, *ParentContextOrErr, CallStackDistance);
+ }
+ 
+ ExpectedStmt ASTNodeImporter::VisitVAArgExpr(VAArgExpr *E) {
+diff --git a/clang/lib/AST/Expr.cpp b/clang/lib/AST/Expr.cpp
+index 1bafc4708a30..d19cfa6ec5cb 100644
+--- a/clang/lib/AST/Expr.cpp
++++ b/clang/lib/AST/Expr.cpp
+@@ -2256,9 +2256,11 @@ bool BinaryOperator::isNullPointerArithmeticExtension(ASTContext &Ctx,
+ SourceLocExpr::SourceLocExpr(const ASTContext &Ctx, SourceLocIdentKind Kind,
+                              QualType ResultTy, SourceLocation BLoc,
+                              SourceLocation RParenLoc,
+-                             DeclContext *ParentContext)
++                             DeclContext *ParentContext,
++                             Expr *CallStackDistance)
+     : Expr(SourceLocExprClass, ResultTy, VK_PRValue, OK_Ordinary),
+-      BuiltinLoc(BLoc), RParenLoc(RParenLoc), ParentContext(ParentContext) {
++      BuiltinLoc(BLoc), RParenLoc(RParenLoc), ParentContext(ParentContext),
++      CallStackDistance(CallStackDistance) {
+   SourceLocExprBits.Kind = llvm::to_underlying(Kind);
+   // In dependent contexts, function names may change.
+   setDependence(MayBeDependent(Kind) && ParentContext->isDependentContext()
+@@ -2286,8 +2288,9 @@ StringRef SourceLocExpr::getBuiltinStr() const {
+   llvm_unreachable("unexpected IdentKind!");
+ }
+ 
+-APValue SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
+-                                         const Expr *DefaultExpr) const {
++APValue SourceLocExpr::EvaluateInContext(
++    const ASTContext &Ctx, const Expr *DefaultExpr,
++    std::optional<SourceLocation> PrecomputedLoc) const {
+   SourceLocation Loc;
+   const DeclContext *Context;
+ 
+@@ -2302,6 +2305,9 @@ APValue SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
+     Loc = getLocation();
+     Context = getParentContext();
+   }
++  if (PrecomputedLoc) {
++    Loc = *PrecomputedLoc;
++  }
+ 
+   // If we are currently parsing a lambda declarator, we might not have a fully
+   // formed call operator declaration yet, and we could not form a function name
 diff --git a/clang/lib/AST/ExprConstant.cpp b/clang/lib/AST/ExprConstant.cpp
-index 1a4c96280107..2995e8309360 100644
+index bc98c0d86bb6..b78d67bd0ddb 100644
 --- a/clang/lib/AST/ExprConstant.cpp
 +++ b/clang/lib/AST/ExprConstant.cpp
 @@ -53,13 +53,18 @@
@@ -862,7 +1070,7 @@ index 1a4c96280107..2995e8309360 100644
  #include "llvm/Support/Debug.h"
  #include "llvm/Support/SaveAndRestore.h"
  #include "llvm/Support/SipHash.h"
-@@ -3546,13 +3551,17 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
+@@ -3540,13 +3545,17 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
    if (auto PE = dyn_cast<PredefinedExpr>(Lit))
      Lit = PE->getFunctionName();
    const StringLiteral *S = cast<StringLiteral>(Lit);
@@ -882,7 +1090,45 @@ index 1a4c96280107..2995e8309360 100644
    if (Index < S->getLength())
      Value = S->getCodeUnit(Index);
    return Value;
-@@ -10692,7 +10701,320 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
+@@ -9968,8 +9977,36 @@ public:
+ 
+   bool VisitSourceLocExpr(const SourceLocExpr *E) {
+     assert(!E->isIntType() && "SourceLocExpr isn't a pointer type?");
++    std::optional<SourceLocation> PrecomputedLoc = std::nullopt;
++    if (const Expr *DistanceArgExpr = E->getCallStackDistance()) {
++      APSInt DistanceValue;
++      if (::EvaluateInteger(DistanceArgExpr, DistanceValue, Info) &&
++          DistanceValue.getBitWidth() <= 64) {
++        // The distance value is based on the current call and doesn't do the
++        // default expression shenanigans.
++        uint64_t CallStackDistance = DistanceValue.getZExtValue();
++        if (CallStackDistance < 1) {
++          SourceLocation TargetLoc = E->getBeginLoc();
++          if (TargetLoc.isValid())
++            PrecomputedLoc = TargetLoc;
++        } else {
++          const unsigned int CallStackIndexDistance = CallStackDistance - 1;
++          const unsigned int TargetFrameIndex =
++              CallStackIndexDistance >= Info.CurrentCall->Index
++                  ? 1
++                  : Info.CurrentCall->Index - CallStackIndexDistance;
++          auto TargetFrameAndDepth =
++              Info.getCallFrameAndDepth(TargetFrameIndex);
++          SourceLocation TargetLoc =
++              TargetFrameAndDepth.first->CallRange.getBegin();
++          if (TargetLoc.isValid())
++            PrecomputedLoc = TargetLoc;
++        }
++      }
++    }
+     APValue LValResult = E->EvaluateInContext(
+-        Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
++        Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr(),
++        PrecomputedLoc);
+     Result.setFrom(Info.Ctx, LValResult);
+     return true;
+   }
+@@ -10704,7 +10741,324 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
          return false;
      }
    }
@@ -1035,7 +1281,7 @@ index 1a4c96280107..2995e8309360 100644
 +      }
 +      return true;
 +    };
-+
+ 
 +    APSInt LocusVal;
 +    if (!EvaluateInteger(LocusArg, LocusVal, Info)) {
 +      return Error(LocusArg);
@@ -1043,7 +1289,7 @@ index 1a4c96280107..2995e8309360 100644
 +    uint64_t Locus = LocusVal.getZExtValue();
 +    const bool DoQuotedSearch = (Locus & 0x01u) == 0x01u;
 +    uint64_t CallStackDistance = (Locus >> 1);
- 
++
 +    APSInt OffsetVal;
 +    if (!EvaluateInteger(OffsetArg, OffsetVal, Info)) {
 +      return Error(OffsetArg);
@@ -1112,21 +1358,25 @@ index 1a4c96280107..2995e8309360 100644
 +    } else {
 +      MaybeSearchEntries = &EmptySearchEntries;
 +    }
-+    OptionalFileEntryRef ResourceFile = LookupFileWithStdVec(
-+        ResourceName, false, true, FM, *MaybeSearchEntries, ThisFile);
++    StringRef FoundDir = "";
++    OptionalFileEntryRef ResourceFile =
++        LookupFileWithStdVec(ResourceName, false, true, FM, *MaybeSearchEntries,
++                             ThisFile, &FoundDir);
 +    if (!ResourceFile) {
 +      Result.setNull(Info.Ctx, PtrOutTy);
 +      return WriteOutStatus(FileNotFound);
 +    }
++    FileEntryRef ResourceFileEntry = *ResourceFile;
 +    assert(Info.Ctx.InputDependencyPatterns &&
 +           "using __builtin_std_embed requires the context to have a usable "
 +           "input dependency patterns");
 +    StringRef ResourceSearchName =
-+        ResourceFile->getFileEntry().tryGetRealPathName();
++        ResourceFileEntry.getFileEntry().tryGetRealPathName();
 +    if (ResourceSearchName.empty()) {
 +      ResourceSearchName = ResourceName;
 +    }
-+    if (!Info.Ctx.InputDependencyPatterns->Check(ResourceSearchName)) {
++    if (!Info.Ctx.InputDependencyPatterns->InputDependencyCheck(
++            ResourceName, FoundDir, ResourceSearchName, ResourceFileEntry)) {
 +      Result.setNull(Info.Ctx, PtrOutTy);
 +      return WriteOutStatus(FileFoundButNotDependedOn);
 +    }
@@ -1203,7 +1453,7 @@ index 1a4c96280107..2995e8309360 100644
    default:
      return false;
    }
-@@ -15365,7 +15687,8 @@ public:
+@@ -15449,7 +15803,8 @@ public:
    bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
      assert(E->getType()->isIntegralOrEnumerationType() &&
             "Invalid evaluation result.");
@@ -1213,19 +1463,39 @@ index 1a4c96280107..2995e8309360 100644
             "Invalid evaluation result.");
      assert(SI.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
             "Invalid evaluation result.");
+diff --git a/clang/lib/AST/StmtPrinter.cpp b/clang/lib/AST/StmtPrinter.cpp
+index 6c3294573e9d..344f41bb25dc 100644
+--- a/clang/lib/AST/StmtPrinter.cpp
++++ b/clang/lib/AST/StmtPrinter.cpp
+@@ -1305,7 +1305,14 @@ void StmtPrinter::VisitOpenACCCacheConstruct(OpenACCCacheConstruct *S) {
+ //===----------------------------------------------------------------------===//
+ 
+ void StmtPrinter::VisitSourceLocExpr(SourceLocExpr *Node) {
+-  OS << Node->getBuiltinStr() << "()";
++  OS << Node->getBuiltinStr();
++  if (Node->getCallStackDistance()) {
++    OS << "(";
++    PrintExpr(Node->getCallStackDistance());
++    OS << ")";
++  } else {
++    OS << "()";
++  }
+ }
+ 
+ void StmtPrinter::VisitEmbedExpr(EmbedExpr *Node) {
 diff --git a/clang/lib/Basic/CMakeLists.txt b/clang/lib/Basic/CMakeLists.txt
-index adfc6ee326b5..936e2798e65d 100644
+index 350c77696bcc..085c0a65fa10 100644
 --- a/clang/lib/Basic/CMakeLists.txt
 +++ b/clang/lib/Basic/CMakeLists.txt
-@@ -71,6 +71,7 @@ add_clang_library(clangBasic
+@@ -70,6 +70,7 @@ add_clang_library(clangBasic
+   FileEntry.cpp
    FileManager.cpp
-   FileSystemStatCache.cpp
    IdentifierTable.cpp
 +  InputDependencyCollection.cpp
    LangOptions.cpp
    LangStandards.cpp
    MakeSupport.cpp
-@@ -83,6 +84,7 @@ add_clang_library(clangBasic
+@@ -82,6 +83,7 @@ add_clang_library(clangBasic
    ParsedAttrInfo.cpp
    ProfileList.cpp
    NoSanitizeList.cpp
@@ -1247,10 +1517,10 @@ index a2e9316e4e37..5eac925fb5e6 100644
    CASE( 6, 'm', 'd', module);
 diff --git a/clang/lib/Basic/InputDependencyCollection.cpp b/clang/lib/Basic/InputDependencyCollection.cpp
 new file mode 100644
-index 000000000000..5f88f079b581
+index 000000000000..c60915b6e2ec
 --- /dev/null
 +++ b/clang/lib/Basic/InputDependencyCollection.cpp
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,241 @@
 +//===--- InputDependencyCollection.h - Searching for Resource----*- C++ -*-===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -1275,19 +1545,45 @@ index 000000000000..5f88f079b581
 +
 +PatternFilter::PatternFilter(std::string Pattern)
 +    : Input(std::move(Pattern)), SearchRoot(""), PatternRoot(""), Pattern(""),
-+      RootHandling(RootPatternScanType::None), Exported(false) {}
++      PatternRegex(), RootHandling(RootPatternScanType::None), Exported(false) {
++}
 +
-+bool PatternFilter::Check(StringRef Filename) const {
-+  if (!PatternRoot.empty()) {
-+    // if the pattern root is not empty, first check if the filename is anchored
-+    // in the pattern's root exit early if it's not
-+    if (!Filename.contains(PatternRoot)) {
-+      return false;
-+    }
-+  }
-+  // otherwise, commit to doing a regex search
++bool PatternFilter::InputDependencyCheck(StringRef Input, StringRef FoundDir,
++                                         StringRef Filename,
++                                         FileEntryRef Fileref) const {
++  // TODO: in the future, more sophisticated checking for different
++  // performance/security reasons may be necessary. Keep these arguments here to
++  // allow minimal disruption of all call locations in the future.
++  (void)Input;
++  (void)FoundDir;
++  (void)Fileref;
++  SmallVector<StringRef, 1> Matches;
 +  if (PatternRegex.match(Filename)) {
-+    // it matches, we can find it
++    // it matches the raw filename, so we know for sure that any `../` or `./`
++    // were appropriately resolved
++    if (PatternRegex.match(Input, &Matches)) {
++      // IF the input is ALSO a match, then we need to use this as a
++      // discriminator, but we cannot scueed solely based on just this match,
++      // because `..` and `./` and other filesystem-specific entities may have
++      // corrupted the input. Therefore, if and only if it matches, we check if
++      // it's properly anchored to the start of this string using Matches, and
++      // if not? we blow it up as illegal.
++      if (Matches[0].data() != Input.data()) {
++        // REJECT since the #depend Input is a match but it's NOT
++        // front-anchored, which is illegal/bad
++        return false;
++      }
++    }
++    return true;
++  }
++
++  return false;
++}
++
++bool PatternFilter::SimpleInputDependencyCheck(StringRef Filename) const {
++  // otherwise, commit to doing a regex search against whatever we have
++  if (PatternRegex.match(Filename)) {
++    // it matches and we can find it
 +    return true;
 +  }
 +
@@ -1386,30 +1682,42 @@ index 000000000000..5f88f079b581
 +                               OptionalFileEntryRef LookupFrom) {
 +  PatternFilters.push_back(ComputeFilter(std::move(Pattern), Exported));
 +  PatternFilter &Filter = PatternFilters.back();
-+  if (Filter.PatternRoot.empty() ||
-+      llvm::sys::path::is_absolute(Filter.PatternRoot)) {
-+    // nothing else to do since it's absolute
-+    // or the PatternRoot is empty, so we can't do any
-+    // pre-culling.
++  if (llvm::sys::path::is_absolute(Filter.PatternRoot)) {
++    // Absolute paths are basically already anchored, no searching to do
++    Filter.SearchRoot = Filter.PatternRoot;
 +    return Filter;
 +  }
 +  // Find a plausible search root among the entries, if possible, to anchor this
 +  // to a given entry
 +  SmallString<256> Buffer;
++  llvm::vfs::FileSystem &VFS = FM.getVirtualFileSystem();
 +  auto TryDetermineSearchRoot = [&](StringRef SearchEntry) -> bool {
-+    if (SearchEntry.contains(Filter.PatternRoot)) {
++    if (!Filter.PatternRoot.empty() &&
++        SearchEntry.contains(Filter.PatternRoot)) {
 +      // the entry is contained within: approve the search entry as the search
 +      // root
 +      Filter.SearchRoot.assign(SearchEntry.begin(), SearchEntry.end());
 +      return true;
 +    }
 +    Buffer.assign(SearchEntry.begin(), SearchEntry.end());
-+    llvm::sys::path::append(Buffer, Filter.PatternRoot);
-+    if (FM.getVirtualFileSystem().exists(Buffer)) {
-+      // if the entry can prefix the pattern root and is a proper location,
-+      // it is the pattern root
-+      Filter.SearchRoot.assign(Buffer.begin(), Buffer.end());
-+      return true;
++    if (Filter.RootHandling == RootPatternScanType::None) {
++      llvm::sys::path::append(Buffer, Filter.Input);
++      if (VFS.exists(Buffer)) {
++        // Then the search root is just the entry itself, and doesn't need the
++        // pattern root Also modify the pattern root to be the *whole* found
++        // file
++        Filter.SearchRoot.assign(SearchEntry.begin(), SearchEntry.end());
++        Filter.PatternRoot.assign(Buffer.begin(), Buffer.end());
++        return true;
++      }
++    } else {
++      llvm::sys::path::append(Buffer, Filter.PatternRoot);
++      if (VFS.exists(Buffer)) {
++        // if the entry can prefix the pattern root and is a proper location,
++        // it is the search root
++        Filter.SearchRoot.assign(Buffer.begin(), Buffer.end());
++        return true;
++      }
 +    }
 +    return false;
 +  };
@@ -1432,9 +1740,21 @@ index 000000000000..5f88f079b581
 +  return Filter;
 +}
 +
-+bool InputDependencyCollection::Check(StringRef Filename) const {
++bool InputDependencyCollection::InputDependencyCheck(
++    StringRef Input, StringRef EmbedDir, StringRef Filename,
++    FileEntryRef Fileref) const {
 +  for (const auto &Filter : PatternFilters) {
-+    if (Filter.Check(Filename)) {
++    if (Filter.InputDependencyCheck(Input, EmbedDir, Filename, Fileref)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++bool InputDependencyCollection::SimpleInputDependencyCheck(
++    StringRef Filename) const {
++  for (const auto &Filter : PatternFilters) {
++    if (Filter.SimpleInputDependencyCheck(Filename)) {
 +      return true;
 +    }
 +  }
@@ -1443,10 +1763,10 @@ index 000000000000..5f88f079b581
 +
 +} // namespace clang
 diff --git a/clang/lib/Basic/LangOptions.cpp b/clang/lib/Basic/LangOptions.cpp
-index 40cdc646780e..6170fa3bebbc 100644
+index 91bf49361de1..b557eb29e6b7 100644
 --- a/clang/lib/Basic/LangOptions.cpp
 +++ b/clang/lib/Basic/LangOptions.cpp
-@@ -123,6 +123,7 @@ void LangOptions::setLangDefaults(LangOptions &Opts, Language Lang,
+@@ -124,6 +124,7 @@ void LangOptions::setLangDefaults(LangOptions &Opts, Language Lang,
    Opts.CPlusPlus20 = Std.isCPlusPlus20();
    Opts.CPlusPlus23 = Std.isCPlusPlus23();
    Opts.CPlusPlus26 = Std.isCPlusPlus26();
@@ -1456,10 +1776,10 @@ index 40cdc646780e..6170fa3bebbc 100644
    Opts.HexFloats = Std.hasHexFloats();
 diff --git a/clang/lib/Basic/ResourceSearch.cpp b/clang/lib/Basic/ResourceSearch.cpp
 new file mode 100644
-index 000000000000..b4d4d367424d
+index 000000000000..54ed9d2601e1
 --- /dev/null
 +++ b/clang/lib/Basic/ResourceSearch.cpp
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,112 @@
 +//===--- ResourceSearch.h - Searching for Resources -------------*- C++ -*-===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -1479,15 +1799,14 @@ index 000000000000..b4d4d367424d
 +namespace clang {
 +
 +template <typename Strings>
-+OptionalFileEntryRef LookupFileWithImpl(StringRef Filename, bool isAngled,
-+                                        bool OpenFile, FileManager &FM,
-+                                        const Strings &SearchEntries,
-+                                        OptionalFileEntryRef LookupFromFile) {
++OptionalFileEntryRef
++LookupFileWithImpl(StringRef Filename, bool isAngled, bool OpenFile,
++                   FileManager &FM, const Strings &SearchEntries,
++                   OptionalFileEntryRef LookupFromFile, StringRef *FoundEntry) {
 +  if (llvm::sys::path::is_absolute(Filename)) {
 +    // lookup path or immediately fail
-+    llvm::Expected<FileEntryRef> ShouldBeEntry = FM.getFileRef(
-+        Filename, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
-+    return llvm::expectedToOptional(std::move(ShouldBeEntry));
++    return FM.getOptionalFileRef(Filename, OpenFile, /*CacheFailure=*/true,
++                                 /*IsText=*/false);
 +  }
 +
 +  auto SeparateComponents = [](SmallVectorImpl<char> &LookupPath,
@@ -1507,33 +1826,37 @@ index 000000000000..b4d4d367424d
 +  SmallString<512> LookupPath;
 +  // Non-angled lookup
 +  if (!isAngled) {
-+    // Use file-based lookup.
 +    if (LookupFromFile) {
++      // Use file-based local lookup.
 +      SmallString<1024> TmpDir;
 +      TmpDir = LookupFromFile->getDir().getName();
 +      llvm::sys::path::append(TmpDir, Filename);
 +      if (!TmpDir.empty()) {
-+        llvm::Expected<FileEntryRef> ShouldBeEntry = FM.getFileRef(
++        OptionalFileEntryRef ShouldBeEntry = FM.getOptionalFileRef(
 +            TmpDir, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
-+        if (ShouldBeEntry)
-+          return llvm::expectedToOptional(std::move(ShouldBeEntry));
-+        llvm::consumeError(ShouldBeEntry.takeError());
++        if (ShouldBeEntry) {
++          if (FoundEntry)
++            *FoundEntry = LookupFromFile->getDir().getName();
++          return ShouldBeEntry;
++        }
 +      }
-+    }
-+
-+    // Otherwise, do working directory lookup.
-+    LookupPath.clear();
-+    auto MaybeWorkingDirEntry = FM.getDirectoryRef(".");
-+    if (MaybeWorkingDirEntry) {
-+      DirectoryEntryRef WorkingDirEntry = *MaybeWorkingDirEntry;
-+      StringRef WorkingDir = WorkingDirEntry.getName();
-+      if (!WorkingDir.empty()) {
-+        SeparateComponents(LookupPath, WorkingDir, Filename, false);
-+        llvm::Expected<FileEntryRef> ShouldBeEntry = FM.getFileRef(
-+            LookupPath, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
-+        if (ShouldBeEntry)
-+          return llvm::expectedToOptional(std::move(ShouldBeEntry));
-+        llvm::consumeError(ShouldBeEntry.takeError());
++    } else {
++      // Otherwise, do working directory lookup.
++      LookupPath.clear();
++      auto MaybeWorkingDirEntry = FM.getOptionalDirectoryRef(".");
++      if (MaybeWorkingDirEntry) {
++        DirectoryEntryRef WorkingDirEntry = *MaybeWorkingDirEntry;
++        StringRef WorkingDir = WorkingDirEntry.getName();
++        if (!WorkingDir.empty()) {
++          SeparateComponents(LookupPath, WorkingDir, Filename, false);
++          OptionalFileEntryRef ShouldBeEntry = FM.getOptionalFileRef(
++              LookupPath, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
++          if (ShouldBeEntry) {
++            if (FoundEntry)
++              *FoundEntry = WorkingDir;
++            return ShouldBeEntry;
++          }
++        }
 +      }
 +    }
 +  }
@@ -1541,37 +1864,39 @@ index 000000000000..b4d4d367424d
 +  for (const auto &Entry : SearchEntries) {
 +    LookupPath.clear();
 +    SeparateComponents(LookupPath, Entry, Filename, false);
-+    llvm::Expected<FileEntryRef> ShouldBeEntry = FM.getFileRef(
++    OptionalFileEntryRef ShouldBeEntry = FM.getOptionalFileRef(
 +        LookupPath, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
-+    if (ShouldBeEntry)
-+      return llvm::expectedToOptional(std::move(ShouldBeEntry));
-+    llvm::consumeError(ShouldBeEntry.takeError());
++    if (ShouldBeEntry) {
++      if (FoundEntry)
++        *FoundEntry = Entry;
++      return ShouldBeEntry;
++    }
 +  }
 +  return std::nullopt;
 +}
 +
-+OptionalFileEntryRef
-+LookupFileWithStdVec(StringRef Filename, bool isAngled, bool OpenFile,
-+                     FileManager &FM,
-+                     const std::vector<std::string> &SearchEntries,
-+                     OptionalFileEntryRef LookupFromFile) {
++OptionalFileEntryRef LookupFileWithStdVec(
++    StringRef Filename, bool isAngled, bool OpenFile, FileManager &FM,
++    const std::vector<std::string> &SearchEntries,
++    OptionalFileEntryRef LookupFromFile, StringRef *FoundEntry) {
 +  return LookupFileWithImpl(Filename, isAngled, OpenFile, FM, SearchEntries,
-+                            LookupFromFile);
++                            LookupFromFile, FoundEntry);
 +}
 +
 +OptionalFileEntryRef LookupFileWith(StringRef Filename, bool isAngled,
 +                                    bool OpenFile, FileManager &FM,
 +                                    ArrayRef<StringRef> SearchEntries,
-+                                    OptionalFileEntryRef LookupFromFile) {
++                                    OptionalFileEntryRef LookupFromFile,
++                                    StringRef *FoundEntry) {
 +  return LookupFileWithImpl(Filename, isAngled, OpenFile, FM, SearchEntries,
-+                            LookupFromFile);
++                            LookupFromFile, FoundEntry);
 +}
 +} // namespace clang
 diff --git a/clang/lib/Frontend/ASTUnit.cpp b/clang/lib/Frontend/ASTUnit.cpp
-index 05ae1f348f92..450e44796cd6 100644
+index 2974cf266018..50489cef2d84 100644
 --- a/clang/lib/Frontend/ASTUnit.cpp
 +++ b/clang/lib/Frontend/ASTUnit.cpp
-@@ -770,12 +770,13 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
+@@ -763,12 +763,13 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
        /*IILookup=*/nullptr,
        /*OwnsHeaderSearch=*/false);
  
@@ -1587,7 +1912,7 @@ index 05ae1f348f92..450e44796cd6 100644
    DisableValidationForModuleKind disableValid =
        DisableValidationForModuleKind::None;
    if (::getenv("LIBCLANG_DISABLE_PCH_VALIDATION"))
-@@ -811,6 +812,9 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
+@@ -807,6 +808,9 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
      // Initialize the ASTContext
      AST->Ctx->InitBuiltinTypes(*AST->Target);
  
@@ -1598,10 +1923,10 @@ index 05ae1f348f92..450e44796cd6 100644
      AST->Ctx->setPrintingPolicy(PrintingPolicy(*AST->LangOpts));
  
 diff --git a/clang/lib/Frontend/CompilerInstance.cpp b/clang/lib/Frontend/CompilerInstance.cpp
-index 91eda7392784..f72cf5071038 100644
+index 8aee45b5dc64..6daddda4f3c8 100644
 --- a/clang/lib/Frontend/CompilerInstance.cpp
 +++ b/clang/lib/Frontend/CompilerInstance.cpp
-@@ -557,6 +557,8 @@ void CompilerInstance::createASTContext() {
+@@ -569,6 +569,8 @@ void CompilerInstance::createASTContext() {
        getLangOpts(), PP.getSourceManager(), PP.getIdentifierTable(),
        PP.getSelectorTable(), PP.getBuiltinInfo(), PP.TUKind);
    Context->InitBuiltinTypes(getTarget(), getAuxTarget());
@@ -1611,7 +1936,7 @@ index 91eda7392784..f72cf5071038 100644
  }
  
 diff --git a/clang/lib/Frontend/DependencyFile.cpp b/clang/lib/Frontend/DependencyFile.cpp
-index d56e17f14e9b..e463347c7efb 100644
+index d56e17f14e9b..ac531b686923 100644
 --- a/clang/lib/Frontend/DependencyFile.cpp
 +++ b/clang/lib/Frontend/DependencyFile.cpp
 @@ -12,6 +12,7 @@
@@ -1646,7 +1971,7 @@ index d56e17f14e9b..e463347c7efb 100644
 +      }
 +      case llvm::sys::fs::file_type::regular_file: {
 +        StringRef Filename = File.path();
-+        if (Filter.Check(Filename)) {
++        if (Filter.SimpleInputDependencyCheck(Filename)) {
 +          DepCollector.maybeAddDependency(Filename,
 +                                          /*FromModule*/ false,
 +                                          /*IsSystem*/ false,
@@ -1677,12 +2002,12 @@ index d56e17f14e9b..e463347c7efb 100644
 +      if (Filter.RootHandling == RootPatternScanType::None) {
 +        // it's either a directory or a file; add the dependency as-is
 +        DepCollector.maybeAddDependency(
-+            Filter.Input,
++            Filter.PatternRoot,
 +            /*FromModule*/ false,
 +            /*IsSystem*/ false,
 +            /*IsModuleFile*/ false,
 +            /*IsDirectModuleImport*/ false,
-+            /*IsMissing*/ !VFS.exists(Filter.Pattern));
++            /*IsMissing*/ !VFS.exists(Filter.PatternRoot));
 +        return;
 +      }
 +      // if there's no search root, simply search from the current file's
@@ -1701,9 +2026,9 @@ index d56e17f14e9b..e463347c7efb 100644
 +    // so we just need to do a singular check-if-exists-and-fire here.
 +    if (Filter.RootHandling == RootPatternScanType::None) {
 +      // treat as a single file, do a lookup and mark it for approval.
-+      if (VFS.exists(Filter.Pattern)) {
++      if (VFS.exists(Filter.PatternRoot)) {
 +        // If it exists, it's what the user meant.
-+        DepCollector.maybeAddDependency(Filter.Pattern,
++        DepCollector.maybeAddDependency(Filter.Input,
 +                                        /*FromModule*/ false,
 +                                        /*IsSystem*/ false,
 +                                        /*IsModuleFile*/ false,
@@ -1744,7 +2069,7 @@ index d56e17f14e9b..e463347c7efb 100644
    PP.addPPCallbacks(std::make_unique<DepCollectorPPCallbacks>(*this, PP));
    PP.getHeaderSearchInfo().getModuleMap().addModuleMapCallbacks(
 diff --git a/clang/lib/Lex/PPDirectives.cpp b/clang/lib/Lex/PPDirectives.cpp
-index 6e90f20572f1..cddcbb9af107 100644
+index eb21a510dcf8..b519b8b40bfe 100644
 --- a/clang/lib/Lex/PPDirectives.cpp
 +++ b/clang/lib/Lex/PPDirectives.cpp
 @@ -19,6 +19,7 @@
@@ -1755,15 +2080,14 @@ index 6e90f20572f1..cddcbb9af107 100644
  #include "clang/Basic/SourceLocation.h"
  #include "clang/Basic/SourceManager.h"
  #include "clang/Basic/TargetInfo.h"
-@@ -1193,72 +1194,10 @@ OptionalFileEntryRef Preprocessor::LookupEmbedFile(StringRef Filename,
+@@ -1193,68 +1194,12 @@ OptionalFileEntryRef Preprocessor::LookupEmbedFile(StringRef Filename,
                                                     bool isAngled,
                                                     bool OpenFile) {
    FileManager &FM = this->getFileManager();
 -  if (llvm::sys::path::is_absolute(Filename)) {
 -    // lookup path or immediately fail
--    llvm::Expected<FileEntryRef> ShouldBeEntry = FM.getFileRef(
--        Filename, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
--    return llvm::expectedToOptional(std::move(ShouldBeEntry));
+-    return FM.getOptionalFileRef(Filename, OpenFile, /*CacheFailure=*/true,
+-                                 /*IsText=*/false);
 -  }
 -
 -  auto SeparateComponents = [](SmallVectorImpl<char> &LookupPath,
@@ -1782,7 +2106,8 @@ index 6e90f20572f1..cddcbb9af107 100644
 -  // Otherwise, it's search time!
 -  SmallString<512> LookupPath;
 -  // Non-angled lookup
--  if (!isAngled) {
++  OptionalFileEntryRef LookupFromFile = std::nullopt;
+   if (!isAngled) {
 -    OptionalFileEntryRef LookupFromFile = getCurrentFileLexer()->getFileEntry();
 -    if (LookupFromFile) {
 -      // Use file-based lookup.
@@ -1790,27 +2115,25 @@ index 6e90f20572f1..cddcbb9af107 100644
 -      TmpDir = LookupFromFile->getDir().getName();
 -      llvm::sys::path::append(TmpDir, Filename);
 -      if (!TmpDir.empty()) {
--        llvm::Expected<FileEntryRef> ShouldBeEntry = FM.getFileRef(
+-        OptionalFileEntryRef ShouldBeEntry = FM.getOptionalFileRef(
 -            TmpDir, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
 -        if (ShouldBeEntry)
--          return llvm::expectedToOptional(std::move(ShouldBeEntry));
--        llvm::consumeError(ShouldBeEntry.takeError());
+-          return ShouldBeEntry;
 -      }
 -    }
 -
 -    // Otherwise, do working directory lookup.
 -    LookupPath.clear();
--    auto MaybeWorkingDirEntry = FM.getDirectoryRef(".");
+-    auto MaybeWorkingDirEntry = FM.getOptionalDirectoryRef(".");
 -    if (MaybeWorkingDirEntry) {
 -      DirectoryEntryRef WorkingDirEntry = *MaybeWorkingDirEntry;
 -      StringRef WorkingDir = WorkingDirEntry.getName();
 -      if (!WorkingDir.empty()) {
 -        SeparateComponents(LookupPath, WorkingDir, Filename, false);
--        llvm::Expected<FileEntryRef> ShouldBeEntry = FM.getFileRef(
+-        OptionalFileEntryRef ShouldBeEntry = FM.getOptionalFileRef(
 -            LookupPath, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
 -        if (ShouldBeEntry)
--          return llvm::expectedToOptional(std::move(ShouldBeEntry));
--        llvm::consumeError(ShouldBeEntry.takeError());
+-          return ShouldBeEntry;
 -      }
 -    }
 -  }
@@ -1818,21 +2141,19 @@ index 6e90f20572f1..cddcbb9af107 100644
 -  for (const auto &Entry : PPOpts.EmbedEntries) {
 -    LookupPath.clear();
 -    SeparateComponents(LookupPath, Entry, Filename, false);
--    llvm::Expected<FileEntryRef> ShouldBeEntry = FM.getFileRef(
+-    OptionalFileEntryRef ShouldBeEntry = FM.getOptionalFileRef(
 -        LookupPath, OpenFile, /*CacheFailure=*/true, /*IsText=*/false);
 -    if (ShouldBeEntry)
--      return llvm::expectedToOptional(std::move(ShouldBeEntry));
--    llvm::consumeError(ShouldBeEntry.takeError());
--  }
+-      return ShouldBeEntry;
++    LookupFromFile = getCurrentFileLexer()->getFileEntry();
+   }
 -  return std::nullopt;
-+  OptionalFileEntryRef LookupFromFileHere =
-+      getCurrentFileLexer()->getFileEntry();
 +  return LookupFileWithStdVec(Filename, isAngled, OpenFile, FM,
-+                              PPOpts.EmbedEntries, LookupFromFileHere);
++                              PPOpts.EmbedEntries, LookupFromFile);
  }
  
  //===----------------------------------------------------------------------===//
-@@ -1359,6 +1298,7 @@ void Preprocessor::HandleDirective(Token &Result) {
+@@ -1355,6 +1300,7 @@ void Preprocessor::HandleDirective(Token &Result) {
        case tok::pp___include_macros:
        case tok::pp_pragma:
        case tok::pp_embed:
@@ -1840,7 +2161,7 @@ index 6e90f20572f1..cddcbb9af107 100644
        case tok::pp_module:
        case tok::pp___preprocessed_module:
        case tok::pp___preprocessed_import:
-@@ -1495,6 +1435,8 @@ void Preprocessor::HandleDirective(Token &Result) {
+@@ -1491,6 +1437,8 @@ void Preprocessor::HandleDirective(Token &Result) {
        return HandleIdentSCCSDirective(Result);
      case tok::pp_embed:
        return HandleEmbedDirective(Introducer.getLocation(), Result);
@@ -1849,7 +2170,7 @@ index 6e90f20572f1..cddcbb9af107 100644
      case tok::pp_assert:
        //isExtension = true;  // FIXME: implement #assert
        break;
-@@ -4197,6 +4139,56 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
+@@ -4198,6 +4146,54 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
    HandleEmbedDirectiveImpl(HashLoc, *Params, BinaryContents, FilenameToGo);
  }
  
@@ -1891,9 +2212,7 @@ index 6e90f20572f1..cddcbb9af107 100644
 +  // this current header file
 +  OptionalFileEntryRef CurrentFile = std::nullopt;
 +  if (IsFileLexer()) {
-+    PreprocessorLexer *ThisFileLexer = getCurrentFileLexer();
-+    FileID ThisFID = ThisFileLexer->getFileID();
-+    CurrentFile = SourceMgr.getFileEntryRefForID(ThisFID);
++    CurrentFile = getCurrentFileLexer()->getFileEntry();
 +  }
 +  const PatternFilter &Filter = InputDependencyPatterns->Add(
 +      Pattern.str(), IsAngled, IsExported, getFileManager(),
@@ -1907,10 +2226,10 @@ index 6e90f20572f1..cddcbb9af107 100644
  ///
  /// pp-import:
 diff --git a/clang/lib/Lex/Preprocessor.cpp b/clang/lib/Lex/Preprocessor.cpp
-index b08459632aac..c1cce240ff0d 100644
+index 1e21b4a94cea..59f62e9df4fa 100644
 --- a/clang/lib/Lex/Preprocessor.cpp
 +++ b/clang/lib/Lex/Preprocessor.cpp
-@@ -1073,8 +1073,30 @@ void Preprocessor::LexTokensUntilEOF(std::vector<Token> *Tokens) {
+@@ -1060,8 +1060,30 @@ void Preprocessor::LexTokensUntilEOF(std::vector<Token> *Tokens) {
  /// \return \c true if we reached EOD or EOF while looking for a > token in
  ///         a concatenated header name and diagnosed it. \c false otherwise.
  bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
@@ -1941,7 +2260,7 @@ index b08459632aac..c1cce240ff0d 100644
    if (CurPPLexer) {
      // Avoid nested header-name lexing when macro expansion recurses
      // __has_include(__has_include))
-@@ -1086,6 +1108,16 @@ bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
+@@ -1073,6 +1095,16 @@ bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
      Lex(FilenameTok);
    }
  
@@ -1958,11 +2277,55 @@ index b08459632aac..c1cce240ff0d 100644
    // This could be a <foo/bar.h> file coming from a macro expansion.  In this
    // case, glue the tokens together into an angle_string_literal token.
    SmallString<128> FilenameBuffer;
+diff --git a/clang/lib/Parse/ParseExpr.cpp b/clang/lib/Parse/ParseExpr.cpp
+index 2987d32d6e0d..73c6d9a703ef 100644
+--- a/clang/lib/Parse/ParseExpr.cpp
++++ b/clang/lib/Parse/ParseExpr.cpp
+@@ -2609,12 +2609,6 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
+   case tok::kw___builtin_FUNCSIG:
+   case tok::kw___builtin_LINE:
+   case tok::kw___builtin_source_location: {
+-    // Attempt to consume the r-paren.
+-    if (Tok.isNot(tok::r_paren)) {
+-      Diag(Tok, diag::err_expected) << tok::r_paren;
+-      SkipUntil(tok::r_paren, StopAtSemi);
+-      return ExprError();
+-    }
+     SourceLocIdentKind Kind = [&] {
+       switch (T) {
+       case tok::kw___builtin_FILE:
+@@ -2635,7 +2629,25 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
+         llvm_unreachable("invalid keyword");
+       }
+     }();
+-    Res = Actions.ActOnSourceLocExpr(Kind, StartLoc, ConsumeParen());
++    Expr *CallStackDistanceExpr = nullptr;
++    if (Kind == SourceLocIdentKind::SourceLocStruct &&
++        Tok.isNot(tok::r_paren)) {
++      // optional expression for traveling up the stack
++      ExprResult MaybeCallStackDistanceExpr(ParseAssignmentExpression());
++      if (MaybeCallStackDistanceExpr.isInvalid()) {
++        SkipUntil(tok::r_paren, StopAtSemi);
++        return ExprError();
++      }
++      CallStackDistanceExpr = MaybeCallStackDistanceExpr.get();
++    }
++    // Check for the final r-paren.
++    if (Tok.isNot(tok::r_paren)) {
++      Diag(Tok, diag::err_expected) << tok::r_paren;
++      SkipUntil(tok::r_paren, StopAtSemi);
++      return ExprError();
++    }
++    Res = Actions.ActOnSourceLocExpr(Kind, StartLoc, ConsumeParen(),
++                                     CallStackDistanceExpr);
+     break;
+   }
+   }
 diff --git a/clang/lib/Sema/SemaChecking.cpp b/clang/lib/Sema/SemaChecking.cpp
-index eb957df6f1e9..8cb7d6908dcf 100644
+index b8a3f48a32f2..c478209ef593 100644
 --- a/clang/lib/Sema/SemaChecking.cpp
 +++ b/clang/lib/Sema/SemaChecking.cpp
-@@ -3941,6 +3941,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
+@@ -4027,6 +4027,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
      if (BuiltinCountedByRef(TheCall))
        return ExprError();
      break;
@@ -1976,7 +2339,7 @@ index eb957df6f1e9..8cb7d6908dcf 100644
    }
  
    if (getLangOpts().HLSL && HLSL().CheckBuiltinFunctionCall(BuiltinID, TheCall))
-@@ -6857,6 +6864,139 @@ bool Sema::BuiltinCountedByRef(CallExpr *TheCall) {
+@@ -6950,6 +6957,139 @@ bool Sema::BuiltinCountedByRef(CallExpr *TheCall) {
    return false;
  }
  
@@ -2116,6 +2479,125 @@ index eb957df6f1e9..8cb7d6908dcf 100644
  /// The result of __builtin_counted_by_ref cannot be assigned to a variable.
  /// It allows leaking and modification of bounds safety information.
  bool Sema::CheckInvalidBuiltinCountedByRef(const Expr *E,
+diff --git a/clang/lib/Sema/SemaExpr.cpp b/clang/lib/Sema/SemaExpr.cpp
+index f2745425588f..91a48007e28d 100644
+--- a/clang/lib/Sema/SemaExpr.cpp
++++ b/clang/lib/Sema/SemaExpr.cpp
+@@ -5753,8 +5753,9 @@ struct EnsureImmediateInvocationInDefaultArgs
+         !SemaRef.CurContext->isDependentContext() || DC->isDependentContext())
+       DC = SemaRef.CurContext;
+ 
+-    return getDerived().RebuildSourceLocExpr(
+-        E->getIdentKind(), E->getType(), E->getBeginLoc(), E->getEndLoc(), DC);
++    return getDerived().RebuildSourceLocExpr(E->getIdentKind(), E->getType(),
++                                             E->getBeginLoc(), E->getEndLoc(),
++                                             DC, E->getCallStackDistance());
+   }
+ };
+ 
+@@ -17467,7 +17468,8 @@ static CXXRecordDecl *LookupStdSourceLocationImpl(Sema &S, SourceLocation Loc) {
+ 
+ ExprResult Sema::ActOnSourceLocExpr(SourceLocIdentKind Kind,
+                                     SourceLocation BuiltinLoc,
+-                                    SourceLocation RPLoc) {
++                                    SourceLocation RPLoc,
++                                    Expr *CallStackDistance) {
+   QualType ResultTy;
+   switch (Kind) {
+   case SourceLocIdentKind::File:
+@@ -17490,20 +17492,34 @@ ExprResult Sema::ActOnSourceLocExpr(SourceLocIdentKind Kind,
+       if (!StdSourceLocationImplDecl)
+         return ExprError();
+     }
++    if (CallStackDistance) {
++      ExprResult MaybeRValueDistance =
++          DefaultLvalueConversion(CallStackDistance);
++      if (MaybeRValueDistance.isInvalid())
++        return ExprError();
++      CallStackDistance = MaybeRValueDistance.get();
++      if (!CallStackDistance->getType()->isIntegralOrEnumerationType()) {
++        Diag(CallStackDistance->getBeginLoc(), diag::err_ice_not_integral)
++            << CallStackDistance->getType();
++        return ExprError();
++      }
++    }
+     ResultTy = Context.getPointerType(
+         Context.getCanonicalTagType(StdSourceLocationImplDecl).withConst());
+     break;
+   }
+ 
+-  return BuildSourceLocExpr(Kind, ResultTy, BuiltinLoc, RPLoc, CurContext);
++  return BuildSourceLocExpr(Kind, ResultTy, BuiltinLoc, RPLoc, CurContext,
++                            CallStackDistance);
+ }
+ 
+ ExprResult Sema::BuildSourceLocExpr(SourceLocIdentKind Kind, QualType ResultTy,
+                                     SourceLocation BuiltinLoc,
+                                     SourceLocation RPLoc,
+-                                    DeclContext *ParentContext) {
+-  return new (Context)
+-      SourceLocExpr(Context, Kind, ResultTy, BuiltinLoc, RPLoc, ParentContext);
++                                    DeclContext *ParentContext,
++                                    Expr *CallStackDistance) {
++  return new (Context) SourceLocExpr(Context, Kind, ResultTy, BuiltinLoc, RPLoc,
++                                     ParentContext, CallStackDistance);
+ }
+ 
+ ExprResult Sema::ActOnEmbedExpr(SourceLocation EmbedKeywordLoc,
+diff --git a/clang/lib/Sema/TreeTransform.h b/clang/lib/Sema/TreeTransform.h
+index 53107c827006..a39dd6ecb468 100644
+--- a/clang/lib/Sema/TreeTransform.h
++++ b/clang/lib/Sema/TreeTransform.h
+@@ -3784,9 +3784,10 @@ public:
+   ExprResult RebuildSourceLocExpr(SourceLocIdentKind Kind, QualType ResultTy,
+                                   SourceLocation BuiltinLoc,
+                                   SourceLocation RPLoc,
+-                                  DeclContext *ParentContext) {
++                                  DeclContext *ParentContext,
++                                  Expr *CallStackDistance) {
+     return getSema().BuildSourceLocExpr(Kind, ResultTy, BuiltinLoc, RPLoc,
+-                                        ParentContext);
++                                        ParentContext, CallStackDistance);
+   }
+ 
+   ExprResult RebuildConceptSpecializationExpr(NestedNameSpecifierLoc NNS,
+@@ -14512,9 +14513,9 @@ ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
+   if (!getDerived().AlwaysRebuild() && !NeedRebuildFunc)
+     return E;
+ 
+-  return getDerived().RebuildSourceLocExpr(E->getIdentKind(), E->getType(),
+-                                           E->getBeginLoc(), E->getEndLoc(),
+-                                           getSema().CurContext);
++  return getDerived().RebuildSourceLocExpr(
++      E->getIdentKind(), E->getType(), E->getBeginLoc(), E->getEndLoc(),
++      getSema().CurContext, E->getCallStackDistance());
+ }
+ 
+ template <typename Derived>
+diff --git a/clang/lib/Serialization/ASTReaderStmt.cpp b/clang/lib/Serialization/ASTReaderStmt.cpp
+index 02ccf8d4d41c..7eea0e626e59 100644
+--- a/clang/lib/Serialization/ASTReaderStmt.cpp
++++ b/clang/lib/Serialization/ASTReaderStmt.cpp
+@@ -1381,6 +1381,7 @@ void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
+   E->BuiltinLoc = readSourceLocation();
+   E->RParenLoc = readSourceLocation();
+   E->SourceLocExprBits.Kind = Record.readInt();
++  E->CallStackDistance = Record.readExpr();
+ }
+ 
+ void ASTStmtReader::VisitEmbedExpr(EmbedExpr *E) {
+diff --git a/clang/lib/Serialization/ASTWriterStmt.cpp b/clang/lib/Serialization/ASTWriterStmt.cpp
+index 4e9eadd730a5..2654396e92be 100644
+--- a/clang/lib/Serialization/ASTWriterStmt.cpp
++++ b/clang/lib/Serialization/ASTWriterStmt.cpp
+@@ -1334,6 +1334,7 @@ void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
+   Record.AddSourceLocation(E->getBeginLoc());
+   Record.AddSourceLocation(E->getEndLoc());
+   Record.push_back(llvm::to_underlying(E->getIdentKind()));
++  Record.AddStmt(E->getCallStackDistance());
+   Code = serialization::EXPR_SOURCE_LOC;
+ }
+ 
 diff --git a/clang/test/Driver/unknown-std.cpp b/clang/test/Driver/unknown-std.cpp
 index 5c58042a0a2c..6c8fcd441a85 100644
 --- a/clang/test/Driver/unknown-std.cpp
@@ -2733,6 +3215,45 @@ index 000000000000..4b8352ed896d
 +static_assert(does_not_exist());
 +static_assert(not_depended_on());
 +static_assert(empty());
+diff --git a/clang/test/SemaCXX/source_location.cpp b/clang/test/SemaCXX/source_location.cpp
+index eaa6cb04c5d1..633320c90dbd 100644
+--- a/clang/test/SemaCXX/source_location.cpp
++++ b/clang/test/SemaCXX/source_location.cpp
+@@ -1091,3 +1091,34 @@ namespace GH178324 {
+   template <class> void c() { decltype(a(current()))::e; }
+ } // namespace GH178324
+ #endif
++
++namespace std {
++	struct source_location {
++		struct __impl {
++			const char* _M_file_name;
++			const char* _M_function_name;
++			unsigned _M_line;
++			unsigned _M_column;
++		};
++	};
++}
++
++constexpr int numeric_sl_b () {
++	constexpr auto x0 = __builtin_source_location(), x = __builtin_source_location(0);
++	constexpr auto y = __builtin_source_location(1);
++	constexpr auto z = __builtin_source_location(2);
++	static_assert(x0->_M_line == 1107 && x->_M_line == 1107, "line numbers wrong");
++	return x->_M_line + y->_M_line + z->_M_line;
++}
++
++constexpr int numeric_sl_a () {
++	return numeric_sl_b();
++}
++
++constexpr int numeric_sl_a_b () {
++	constexpr int v = numeric_sl_a();
++	static_assert(v == (1'107 + 1'115 + 1'119), "line numbers wrong");
++	return v;
++}
++
++static_assert(numeric_sl_a_b() == 3'341);
 diff --git a/clang/tools/clang-import-test/clang-import-test.cpp b/clang/tools/clang-import-test/clang-import-test.cpp
 index 8e83687d3e96..2234f44c0611 100644
 --- a/clang/tools/clang-import-test/clang-import-test.cpp
@@ -2772,10 +3293,10 @@ index 3e5e84b5b2ed..71ce7ecf416d 100755
    supporting the latest language standards. Please see the
    <a href="cxx_status.html">C++ status report page</a> to find out what is
 diff --git a/clang/www/cxx_status.html b/clang/www/cxx_status.html
-index 8b7290a2a60c..10b6475dc717 100755
+index f96b0cafcf2c..92cf953715f2 100755
 --- a/clang/www/cxx_status.html
 +++ b/clang/www/cxx_status.html
-@@ -374,6 +374,12 @@ C++23, informally referred to as C++26.</p>
+@@ -484,6 +484,12 @@ C++23, informally referred to as C++26.</p>
     <td><a href="https://wg21.link/P3769">P3769R1</a>(<a href="#dr">DR</a>)</td>
     <td class="none" align="center">No</td>
   </tr>
@@ -2789,10 +3310,10 @@ index 8b7290a2a60c..10b6475dc717 100755
  </details>
  
 diff --git a/libcxx/docs/FeatureTestMacroTable.rst b/libcxx/docs/FeatureTestMacroTable.rst
-index 941c1c23c7d8..f30f57f83d67 100644
+index 8e26bdcd860c..98877e8bd5c1 100644
 --- a/libcxx/docs/FeatureTestMacroTable.rst
 +++ b/libcxx/docs/FeatureTestMacroTable.rst
-@@ -539,5 +539,9 @@ Status
+@@ -545,5 +545,9 @@ Status
      ``__cpp_lib_tuple_like``                                   *unimplemented*
      ---------------------------------------------------------- -----------------
      ``__cpp_lib_variant``                                      ``202306L``
@@ -2871,31 +3392,11 @@ index 000000000000..fd38c16435f4
 +"Paper #","Paper Name","Meeting","Status","First released version","GitHub issue","Notes"
 +"`P1040R10 <https://wg21.link/P1040R10>`__","``std::embed``","2026-06 (Brno)","","","`#190578 <https://github.com/llvm/llvm-project/pull/190578>`__","Experimental"
 +"", "", "", "", "", "", ""
-diff --git a/libcxx/docs/index.rst b/libcxx/docs/index.rst
-index 38f77580d453..10086364088f 100644
---- a/libcxx/docs/index.rst
-+++ b/libcxx/docs/index.rst
-@@ -49,6 +49,7 @@ Getting Started with libc++
-    Status/Cxx20
-    Status/Cxx23
-    Status/Cxx2c
-+   Status/Cxx2d
-    Status/Format
-    Status/Parallelism
- 
-@@ -184,6 +185,7 @@ this release is described in the pages below:
- * :ref:`C++20 - In Progress <cxx20-status>`
- * :ref:`C++23 - In Progress <cxx23-status>`
- * :ref:`C++2c - In Progress <cxx2c-status>`
-+* :ref:`C++2d - In Progress <cxx2d-status>`
- * :ref:`C++ Feature Test Macro Status <feature-status>`
- 
- 
 diff --git a/libcxx/include/CMakeLists.txt b/libcxx/include/CMakeLists.txt
-index 497aadfd799b..2d4cd1194368 100644
+index cb7ae820bc01..5f3f042332c7 100644
 --- a/libcxx/include/CMakeLists.txt
 +++ b/libcxx/include/CMakeLists.txt
-@@ -1014,6 +1014,7 @@ set(files
+@@ -1011,6 +1011,7 @@ set(files
    cwchar
    cwctype
    deque
@@ -2923,10 +3424,10 @@ index 3137ba2ea27e..ebc197515960 100644
  // NOLINTEND(libcpp-cpp-version-check)
 diff --git a/libcxx/include/embed b/libcxx/include/embed
 new file mode 100644
-index 000000000000..2de5df8923c6
+index 000000000000..265e1e1f9e98
 --- /dev/null
 +++ b/libcxx/include/embed
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,268 @@
 +// -*- C++ -*-
 +//===----------------------------------------------------------------------===//
 +//
@@ -2943,6 +3444,10 @@ index 000000000000..2de5df8923c6
 +    embed synopsis
 +
 +namespace std {
++
++  class file_not_found_error;
++
++  class dependency_error;
 +
 +  template <class T>
 +consteval span<const T> embed(string_view resource_idenfier,
@@ -2981,8 +3486,10 @@ index 000000000000..2de5df8923c6
 +#include <__type_traits/is_same.h>
 +#include <__verbose_abort>
 +#include <optional>
++#include <source_location>
 +#include <span>
 +#include <stdexcept>
++#include <string>
 +#include <string_view>
 +#include <version>
 +
@@ -2990,9 +3497,89 @@ index 000000000000..2de5df8923c6
 +#  pragma GCC system_header
 +#endif
 +
-+#if __has_builtin(__builtin_std_embed)
++#if __has_builtin(__builtin_std_embed) && _LIBCPP_STD_VER > 20
 +
 +_LIBCPP_BEGIN_NAMESPACE_STD
++
++class file_not_found_error : public std::exception {
++private:
++  optional<string> __what;
++  u8string __u8what;
++  source_location __where;
++
++public:
++  consteval file_not_found_error(u8string_view __in_u8what,
++                                 source_location __in_where = source_location::current()) noexcept
++      : __what(), __u8what(__in_u8what), __where(std::move(__in_where)) {
++    // FIXME: we are just assuming the ordinary literal encoding can handle UTF-8.
++    const size_t __u8what_size = __u8what.size();
++    __what.emplace(__u8what_size, '\0');
++    string& __wh = *__what;
++    for (size_t __idx = 0; __idx < __u8what_size; ++__idx)
++      __wh[__idx] = static_cast<char>(__u8what[__idx]);
++  }
++
++  consteval file_not_found_error(string_view __in_what,
++                                 source_location __in_where = source_location::current()) noexcept
++      : __what(__in_what), __u8what(), __where(std::move(__in_where)) {
++    // FIXME: get specific about `__u8what` only containing UTF-8, or doing nothing when the ordinary literal encoding
++    // is not proper
++    const size_t __what_size = __what->size();
++    __u8what.resize(__what_size);
++    string& __wh = *__what;
++    for (size_t __idx = 0; __idx < __what_size; ++__idx)
++      __u8what[__idx] = __wh[__idx];
++  }
++
++  file_not_found_error(const file_not_found_error&) = default;
++  file_not_found_error(file_not_found_error&&)      = default;
++
++  file_not_found_error& operator=(const file_not_found_error&) = default;
++  file_not_found_error& operator=(file_not_found_error&&)      = default;
++
++  constexpr const char* what() const noexcept override { return __what ? __what->c_str() : ""; }
++  consteval u8string_view u8what() const noexcept { return __u8what; }
++  consteval source_location where() const noexcept { return __where; }
++};
++
++class dependency_error : public std::exception {
++private:
++  optional<string> __what;
++  u8string __u8what;
++  source_location __where;
++
++public:
++  consteval dependency_error(u8string_view __in_what, source_location __in_where = source_location::current()) noexcept
++      : __what(), __u8what(__in_what), __where(std::move(__in_where)) {
++    // FIXME: we are just assuming the ordinary literal encoding can handle UTF-8.
++    const size_t __u8what_size = __u8what.size();
++    __what.emplace(__u8what_size, '\0');
++    string& __wh = *__what;
++    for (size_t __idx = 0; __idx < __u8what_size; ++__idx)
++      __wh[__idx] = static_cast<char>(__u8what[__idx]);
++  }
++
++  consteval dependency_error(string_view __in_what, source_location __in_where = source_location::current()) noexcept
++      : __what(__in_what), __u8what(), __where(std::move(__in_where)) {
++    // FIXME: get specific about `__u8what` only containing UTF-8, or doing nothing when the ordinary literal encoding
++    // is not proper
++    const size_t __what_size = __what->size();
++    __u8what.resize(__what_size);
++    string& __wh = *__what;
++    for (size_t __idx = 0; __idx < __what_size; ++__idx)
++      __u8what[__idx] = __wh[__idx];
++  }
++
++  dependency_error(const dependency_error&) = default;
++  dependency_error(dependency_error&&)      = default;
++
++  dependency_error& operator=(const dependency_error&) = default;
++  dependency_error& operator=(dependency_error&&)      = default;
++
++  constexpr const char* what() const noexcept override { return __what ? __what->c_str() : ""; }
++  consteval u8string_view u8what() const noexcept { return __u8what; }
++  consteval source_location where() const noexcept { return __where; }
++};
 +
 +namespace __embed_detail {
 +enum __builtin_embed_status {
@@ -3002,9 +3589,10 @@ index 000000000000..2de5df8923c6
 +  __file_found_empty      = 3,
 +};
 +inline constexpr unsigned int __quoted_search_distance = 0b101;
++inline constexpr unsigned int __call_stack_distance    = 0b010;
 +
 +template <typename _Byte, size_t _Extent, typename _StrView>
-+_LIBCPP_NODISCARD consteval _LIBCPP_HIDE_FROM_ABI span<const _Byte, _Extent>
++[[nodiscard]] consteval _LIBCPP_HIDE_FROM_ABI span<const _Byte, _Extent>
 +__embed(const _StrView& __resource_identifier, size_t __offset, [[maybe_unused]] const optional<size_t>& __limit) {
 +  static_assert(is_same_v<_Byte, unsigned char> || is_same_v<_Byte, char> || is_same_v<_Byte, byte>,
 +                "embed type must be unqualified 'char', 'unsigned char', or 'byte'");
@@ -3044,9 +3632,15 @@ index 000000000000..2de5df8923c6
 +    }
 +  }
 +  if (__status == __file_not_found) {
-+    _LIBCPP_VERBOSE_ABORT("file not found");
++    // FIXME: kind of cheating to use current() to do this, but that's how it is!
++    auto __builtin_loc = __builtin_source_location(__call_stack_distance);
++    auto __loc         = source_location::current(__builtin_loc);
++    throw file_not_found_error(u8"file not found", __loc);
 +  } else if (__status == __file_found_no_depends) {
-+    _LIBCPP_VERBOSE_ABORT("file found but not appropriately '#depend ...'ed on");
++    // FIXME: kind of cheating to use current() to do this, but that's how it is!
++    auto __builtin_loc = __builtin_source_location(__call_stack_distance);
++    auto __loc         = source_location::current(__builtin_loc);
++    throw dependency_error(u8"file found but not appropriately '#depend ...'ed on", __loc);
 +  }
 +  if constexpr (_Extent != std::dynamic_extent) {
 +    if (_Extent > __size) {
@@ -3065,35 +3659,35 @@ index 000000000000..2de5df8923c6
 +} // namespace __embed_detail
 +
 +template <typename _Byte = byte>
-+_LIBCPP_NODISCARD consteval span<const _Byte>
++[[nodiscard]] consteval span<const _Byte>
 +embed(string_view __resource_identifier, size_t __offset = 0, optional<size_t> __limit = nullopt) {
 +  return __embed_detail::__embed<_Byte, dynamic_extent>(__resource_identifier, __offset, __limit);
 +}
 +
 +template <typename _Byte = byte>
-+_LIBCPP_NODISCARD consteval span<const _Byte>
++[[nodiscard]] consteval span<const _Byte>
 +embed(wstring_view __resource_identifier, size_t __offset = 0, optional<size_t> __limit = nullopt) {
 +  return __embed_detail::__embed<_Byte, dynamic_extent>(__resource_identifier, __offset, __limit);
 +}
 +
 +template <typename _Byte = byte>
-+_LIBCPP_NODISCARD consteval span<const _Byte>
++[[nodiscard]] consteval span<const _Byte>
 +embed(u8string_view __resource_identifier, size_t __offset = 0, optional<size_t> __limit = nullopt) {
 +  return __embed_detail::__embed<_Byte, dynamic_extent>(__resource_identifier, __offset, __limit);
 +}
 +
 +template <size_t _Limit, typename _Byte = byte>
-+_LIBCPP_NODISCARD consteval span<const _Byte, _Limit> embed(string_view __resource_identifier, size_t __offset = 0) {
++[[nodiscard]] consteval span<const _Byte, _Limit> embed(string_view __resource_identifier, size_t __offset = 0) {
 +  return __embed_detail::__embed<_Byte, _Limit>(__resource_identifier, __offset, nullopt);
 +}
 +
 +template <size_t _Limit, typename _Byte = byte>
-+_LIBCPP_NODISCARD consteval span<const _Byte, _Limit> embed(wstring_view __resource_identifier, size_t __offset = 0) {
++[[nodiscard]] consteval span<const _Byte, _Limit> embed(wstring_view __resource_identifier, size_t __offset = 0) {
 +  return __embed_detail::__embed<_Byte, _Limit>(__resource_identifier, __offset, nullopt);
 +}
 +
 +template <size_t _Limit, typename _Byte = byte>
-+_LIBCPP_NODISCARD consteval span<const _Byte, _Limit> embed(u8string_view __resource_identifier, size_t __offset = 0) {
++[[nodiscard]] consteval span<const _Byte, _Limit> embed(u8string_view __resource_identifier, size_t __offset = 0) {
 +  return __embed_detail::__embed<_Byte, _Limit>(__resource_identifier, __offset, nullopt);
 +}
 +
@@ -3103,10 +3697,10 @@ index 000000000000..2de5df8923c6
 +
 +#endif // _LIBCPP_EMBED
 diff --git a/libcxx/include/version b/libcxx/include/version
-index 8ff06dae7bb0..07a7594af019 100644
+index 7f2dc9e4b72a..f6724e9d386d 100644
 --- a/libcxx/include/version
 +++ b/libcxx/include/version
-@@ -102,6 +102,7 @@ __cpp_lib_default_template_type_for_algorithm_values    202403L <algorithm> <deq
+@@ -103,6 +103,7 @@ __cpp_lib_default_template_type_for_algorithm_values    202403L <algorithm> <deq
                                                                  <list> <ranges> <string>
                                                                  <vector>
  __cpp_lib_destroying_delete                             201806L <new>
@@ -3114,17 +3708,31 @@ index 8ff06dae7bb0..07a7594af019 100644
  __cpp_lib_enable_shared_from_this                       201603L <memory>
  __cpp_lib_endian                                        201907L <bit>
  __cpp_lib_erase_if                                      202002L <deque> <forward_list> <list>
-@@ -636,6 +637,10 @@ __cpp_lib_void_t                                        201411L <type_traits>
+@@ -643,6 +644,12 @@ __cpp_lib_void_t                                        201411L <type_traits>
  # define __cpp_lib_variant                              202306L
  #endif
  
 +#if _LIBCPP_STD_VER >= 29
-+# define __cpp_lib_embed                                202606L
++# if __has_builtin(__builtin_std_embed) && _LIBCPP_STD_VER > 26
++#   define __cpp_lib_embed                              202606L
++# endif
 +#endif
 +
  #endif // __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
  
  // clang-format on
+diff --git a/libcxx/modules/std.cppm.in b/libcxx/modules/std.cppm.in
+index 6de6369c3387..6809dec54395 100644
+--- a/libcxx/modules/std.cppm.in
++++ b/libcxx/modules/std.cppm.in
+@@ -54,6 +54,7 @@ module;
+ #include <cwchar>
+ #include <cwctype>
+ #include <deque>
++#include <embed>
+ #include <exception>
+ #include <execution>
+ #include <expected>
 diff --git a/libcxx/test/std/embed/a.txt b/libcxx/test/std/embed/a.txt
 new file mode 100644
 index 000000000000..78981922613b
@@ -3134,10 +3742,10 @@ index 000000000000..78981922613b
 +a
 diff --git a/libcxx/test/std/embed/embed-mandates.verify.cpp b/libcxx/test/std/embed/embed-mandates.verify.cpp
 new file mode 100644
-index 000000000000..31d1db0e63b7
+index 000000000000..78d40fda227d
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-mandates.verify.cpp
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,35 @@
 +//===----------------------------------------------------------------------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -3146,9 +3754,7 @@ index 000000000000..31d1db0e63b7
 +//
 +//===----------------------------------------------------------------------===//
 +
-+// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20
-+
-+// check that <embed> functions are marked [[nodiscard]]
++// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20, c++23, c++26
 +
 +#include <embed>
 +
@@ -3157,7 +3763,7 @@ index 000000000000..31d1db0e63b7
 +#include "test_macros.h"
 +
 +consteval bool test() {
-+#if TEST_STD_VER >= 23
++#if __cpp_lib_embed
 +  // make sure to test each individual overload
 +  (void)std::embed<signed char>(__FILE__);
 +  // expected-error@-1 {{embed type must be unqualified 'char', 'unsigned char', or 'byte'}}
@@ -3171,13 +3777,13 @@ index 000000000000..31d1db0e63b7
 +  return true;
 +}
 +
-+int main (int, char*[]) {
++int main(int, char*[]) {
 +  static_assert(test());
 +  return 0;
 +}
 diff --git a/libcxx/test/std/embed/embed-nodiscard.verify.cpp b/libcxx/test/std/embed/embed-nodiscard.verify.cpp
 new file mode 100644
-index 000000000000..1b05dcab0d85
+index 000000000000..4c9fe179f5ed
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-nodiscard.verify.cpp
 @@ -0,0 +1,49 @@
@@ -3189,7 +3795,7 @@ index 000000000000..1b05dcab0d85
 +//
 +//===----------------------------------------------------------------------===//
 +
-+// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20
++// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20, c++23, c++26
 +
 +// check that <embed> functions are marked [[nodiscard]]
 +
@@ -3203,7 +3809,7 @@ index 000000000000..1b05dcab0d85
 +#define STR_PREFIX(a, b) STR_PREFIX_(a, b)
 +
 +consteval bool test() {
-+#if TEST_STD_VER >= 23
++#if __cpp_lib_embed
 +  // make sure to test each individual overload
 +  std::embed(__FILE__);
 +  // expected-warning@-1 {{ignoring return value of function declared with 'nodiscard' attribute}}
@@ -3226,16 +3832,16 @@ index 000000000000..1b05dcab0d85
 +#undef STR_PREFIX_
 +#undef STR_PREFIX
 +
-+int main (int, char*[]) {
++int main(int, char*[]) {
 +  static_assert(test());
 +  return 0;
 +}
 diff --git a/libcxx/test/std/embed/embed-post-conditions.pass.cpp b/libcxx/test/std/embed/embed-post-conditions.pass.cpp
 new file mode 100644
-index 000000000000..682970c2f38e
+index 000000000000..6d33670b1fb4
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-post-conditions.pass.cpp
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,63 @@
 +//===----------------------------------------------------------------------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -3244,9 +3850,7 @@ index 000000000000..682970c2f38e
 +//
 +//===----------------------------------------------------------------------===//
 +
-+// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20
-+
-+// check that <embed> functions are marked [[nodiscard]]
++// UNSUPPORTED: c++03, c++11, c++14, c++17, c++20, c++23, c++26
 +
 +// clang-format off
 +
@@ -3259,15 +3863,18 @@ index 000000000000..682970c2f38e
 +#include "test_macros.h"
 +
 +consteval bool test() {
-+#if TEST_STD_VER >= 23
++#if __cpp_lib_embed
 +  constexpr auto v0 = std::embed("a.txt");
-+  static_assert(v0.data() != nullptr);
 +  static_assert(v0.size() == 1);
 +  static_assert(v0[0] == (std::byte)u8'a');
 +
 +  constexpr auto v1 = std::embed(__FILE__);
-+  static_assert(v1.data() == nullptr);
-+  static_assert(v1.size() == 0);
++  static_assert(v1.size() == 1831);
++  static_assert(v1[0] == (std::byte)'/');
++  static_assert(v1[1] == (std::byte)'/');
++  static_assert(v1[2] == (std::byte)'=');
++  static_assert(v1[3] == (std::byte)'=');
++  static_assert(v1[4] == (std::byte)'=');
 +
 +  constexpr auto v2 = std::embed(__FILE__, 0x123456);
 +  static_assert(v2.data() == nullptr);
@@ -3285,26 +3892,27 @@ index 000000000000..682970c2f38e
 +  static_assert(v5.data() == nullptr);
 +  static_assert(v5.size() == 0);
 +
-+  constexpr auto v6 = std::embed(__FILE__, 3, 1);
-+  static_assert(v6.size() == 1);
++  constexpr auto v6 = std::embed(__FILE__, 3, 3);
++  static_assert(v6.size() == 3);
 +  static_assert(v6[0] == (std::byte)u8'=');
++  static_assert(v6[1] == (std::byte)u8'=');
++  static_assert(v6[2] == (std::byte)u8'-');
 +#endif
 +  return true;
 +}
 +
-+int main (int, char*[]) {
++int main(int, char*[]) {
 +  static_assert(test());
 +  return 0;
 +}
-+
 diff --git a/libcxx/test/std/embed/empty b/libcxx/test/std/embed/empty
 new file mode 100644
 index 000000000000..e69de29bb2d1
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp
-index beecf87cd4aa..17d50b313591 100644
+index 657875444c68..133d4bf592f3 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp
-@@ -352,7 +352,7 @@
+@@ -375,7 +375,7 @@
  #    error "__cpp_lib_shift should have the value 202202L in c++23"
  #  endif
  
@@ -3313,7 +3921,7 @@ index beecf87cd4aa..17d50b313591 100644
  
  #  ifndef __cpp_lib_clamp
  #    error "__cpp_lib_clamp should be defined in c++26"
-@@ -456,6 +456,110 @@
+@@ -486,6 +486,117 @@
  #    error "__cpp_lib_shift should have the value 202202L in c++26"
  #  endif
  
@@ -3392,6 +4000,13 @@ index beecf87cd4aa..17d50b313591 100644
 +#  endif
 +#  if __cpp_lib_ranges_find_last != 202207L
 +#    error "__cpp_lib_ranges_find_last should have the value 202207L in c++29"
++#  endif
++
++#  ifndef __cpp_lib_ranges_fold
++#    error "__cpp_lib_ranges_fold should be defined in c++29"
++#  endif
++#  if __cpp_lib_ranges_fold != 202207L
++#    error "__cpp_lib_ranges_fold should have the value 202207L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_ranges_starts_ends_with
@@ -3513,7 +4128,7 @@ index 30efb61893a1..5f5dc28e5ba2 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/atomic.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/atomic.version.compile.pass.cpp
-index e62416257a69..16ae82e8b3c5 100644
+index e62416257a69..4ca5d4492edb 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/atomic.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/atomic.version.compile.pass.cpp
 @@ -309,7 +309,7 @@
@@ -3576,8 +4191,8 @@ index e62416257a69..16ae82e8b3c5 100644
 +#  ifndef __cpp_lib_atomic_ref
 +#    error "__cpp_lib_atomic_ref should be defined in c++29"
 +#  endif
-+#  if __cpp_lib_atomic_ref != 202411L
-+#    error "__cpp_lib_atomic_ref should have the value 202411L in c++29"
++#  if __cpp_lib_atomic_ref != 202603L
++#    error "__cpp_lib_atomic_ref should have the value 202603L in c++29"
 +#  endif
 +
 +#  if !defined(_LIBCPP_VERSION)
@@ -4192,10 +4807,10 @@ index b634f3253093..e8dde05dd7b0 100644
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/embed.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/embed.version.compile.pass.cpp
 new file mode 100644
-index 000000000000..241c29bb4169
+index 000000000000..01a702bddf88
 --- /dev/null
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/embed.version.compile.pass.cpp
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,74 @@
 +//===----------------------------------------------------------------------===//
 +//
 +// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -4254,11 +4869,17 @@ index 000000000000..241c29bb4169
 +
 +#elif TEST_STD_VER > 26
 +
-+#  ifndef __cpp_lib_embed
-+#    error "__cpp_lib_embed should be defined in c++29"
-+#  endif
-+#  if __cpp_lib_embed != 202606L
-+#    error "__cpp_lib_embed should have the value 202606L in c++29"
++#  if __has_builtin(__builtin_std_embed)  && _LIBCPP_STD_VER > 26
++#    ifndef __cpp_lib_embed
++#      error "__cpp_lib_embed should be defined in c++29"
++#    endif
++#    if __cpp_lib_embed != 202606L
++#      error "__cpp_lib_embed should have the value 202606L in c++29"
++#    endif
++#  else
++#    ifdef __cpp_lib_embed
++#      error "__cpp_lib_embed should not be defined when the requirement '__has_builtin(__builtin_std_embed)  && _LIBCPP_STD_VER > 26' is not met!"
++#    endif
 +#  endif
 +
 +#endif // TEST_STD_VER > 26
@@ -5228,10 +5849,10 @@ index f516881651b2..2b93c27899ad 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/map.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/map.version.compile.pass.cpp
-index 3db3861c72b5..6c5a4a860b7b 100644
+index 794c2ee9ad08..09eb6471c120 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/map.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/map.version.compile.pass.cpp
-@@ -303,7 +303,7 @@
+@@ -323,7 +323,7 @@
  #    endif
  #  endif
  
@@ -5240,7 +5861,7 @@ index 3db3861c72b5..6c5a4a860b7b 100644
  
  #  ifndef __cpp_lib_allocator_traits_is_always_equal
  #    error "__cpp_lib_allocator_traits_is_always_equal should be defined in c++26"
-@@ -393,6 +393,96 @@
+@@ -420,6 +420,103 @@
  #    endif
  #  endif
  
@@ -5278,6 +5899,13 @@ index 3db3861c72b5..6c5a4a860b7b 100644
 +#    ifdef __cpp_lib_associative_heterogeneous_insertion
 +#      error "__cpp_lib_associative_heterogeneous_insertion should not be defined because it is unimplemented in libc++!"
 +#    endif
++#  endif
++
++#  ifndef __cpp_lib_constexpr_map
++#    error "__cpp_lib_constexpr_map should be defined in c++29"
++#  endif
++#  if __cpp_lib_constexpr_map != 202502L
++#    error "__cpp_lib_constexpr_map should have the value 202502L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_containers_ranges
@@ -5402,7 +6030,7 @@ index fad0e5b9777d..051a307d3189 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/memory.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/memory.version.compile.pass.cpp
-index f287e1ad9b3a..db7e309a582c 100644
+index c58357a463ff..9e19825af6a2 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/memory.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/memory.version.compile.pass.cpp
 @@ -534,7 +534,7 @@
@@ -5742,7 +6370,7 @@ index 27170d1ea0ce..8e6bed209fd2 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/numeric.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/numeric.version.compile.pass.cpp
-index d629407c9b64..6dce9ac28331 100644
+index d629407c9b64..3770febcd529 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/numeric.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/numeric.version.compile.pass.cpp
 @@ -199,7 +199,7 @@
@@ -5805,8 +6433,8 @@ index d629407c9b64..6dce9ac28331 100644
 +#  ifndef __cpp_lib_saturation_arithmetic
 +#    error "__cpp_lib_saturation_arithmetic should be defined in c++29"
 +#  endif
-+#  if __cpp_lib_saturation_arithmetic != 202311L
-+#    error "__cpp_lib_saturation_arithmetic should have the value 202311L in c++29"
++#  if __cpp_lib_saturation_arithmetic != 202603L
++#    error "__cpp_lib_saturation_arithmetic should have the value 202603L in c++29"
 +#  endif
 +
 +#endif // TEST_STD_VER > 26
@@ -6054,7 +6682,7 @@ index d0ede1168dfa..d80581f227cc 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/ranges.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/ranges.version.compile.pass.cpp
-index 6825f9675d45..553dca7d9eff 100644
+index 670b0e664721..bb59b52b99cb 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/ranges.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/ranges.version.compile.pass.cpp
 @@ -385,7 +385,7 @@
@@ -6066,7 +6694,7 @@ index 6825f9675d45..553dca7d9eff 100644
  
  #  if !defined(_LIBCPP_VERSION)
  #    ifndef __cpp_lib_default_template_type_for_algorithm_values
-@@ -522,6 +522,129 @@
+@@ -516,6 +516,137 @@
  #    error "__cpp_lib_ranges_zip should have the value 202110L in c++26"
  #  endif
  
@@ -6133,17 +6761,18 @@ index 6825f9675d45..553dca7d9eff 100644
 +#    error "__cpp_lib_ranges_chunk_by should have the value 202202L in c++29"
 +#  endif
 +
-+#  if !defined(_LIBCPP_VERSION)
-+#    ifndef __cpp_lib_ranges_concat
-+#      error "__cpp_lib_ranges_concat should be defined in c++29"
-+#    endif
-+#    if __cpp_lib_ranges_concat != 202403L
-+#      error "__cpp_lib_ranges_concat should have the value 202403L in c++29"
-+#    endif
-+#  else
-+#    ifdef __cpp_lib_ranges_concat
-+#      error "__cpp_lib_ranges_concat should not be defined because it is unimplemented in libc++!"
-+#    endif
++#  ifndef __cpp_lib_ranges_concat
++#    error "__cpp_lib_ranges_concat should be defined in c++29"
++#  endif
++#  if __cpp_lib_ranges_concat != 202403L
++#    error "__cpp_lib_ranges_concat should have the value 202403L in c++29"
++#  endif
++
++#  ifndef __cpp_lib_ranges_enumerate
++#    error "__cpp_lib_ranges_enumerate should be defined in c++29"
++#  endif
++#  if __cpp_lib_ranges_enumerate != 202302L
++#    error "__cpp_lib_ranges_enumerate should have the value 202302L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_ranges_indices
@@ -6178,6 +6807,13 @@ index 6825f9675d45..553dca7d9eff 100644
 +#    ifdef __cpp_lib_ranges_slide
 +#      error "__cpp_lib_ranges_slide should not be defined because it is unimplemented in libc++!"
 +#    endif
++#  endif
++
++#  ifndef __cpp_lib_ranges_stride
++#    error "__cpp_lib_ranges_stride should be defined in c++29"
++#  endif
++#  if __cpp_lib_ranges_stride != 202207L
++#    error "__cpp_lib_ranges_stride should have the value 202207L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_ranges_to_container
@@ -6494,34 +7130,23 @@ index 9495e319521c..d89049ce4ad3 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/span.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/span.version.compile.pass.cpp
-index 28c54acd0fda..c21f9c9ebabe 100644
+index 28c54acd0fda..9fc49192a4f5 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/span.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/span.version.compile.pass.cpp
-@@ -74,7 +74,11 @@
+@@ -74,7 +74,7 @@
  #    error "__cpp_lib_span_at should not be defined before c++26"
  #  endif
  
 -#elif TEST_STD_VER > 23
-+#  ifdef __cpp_lib_span_initializer_list
-+#    error "__cpp_lib_span_initializer_list should not be defined before c++26"
-+#  endif
-+
 +#elif TEST_STD_VER == 26
  
  #  ifndef __cpp_lib_span
  #    error "__cpp_lib_span should be defined in c++26"
-@@ -90,6 +94,36 @@
+@@ -90,6 +90,22 @@
  #    error "__cpp_lib_span_at should have the value 202311L in c++26"
  #  endif
  
 -#endif // TEST_STD_VER > 23
-+#  ifndef __cpp_lib_span_initializer_list
-+#    error "__cpp_lib_span_initializer_list should be defined in c++26"
-+#  endif
-+#  if __cpp_lib_span_initializer_list != 202311L
-+#    error "__cpp_lib_span_initializer_list should have the value 202311L in c++26"
-+#  endif
-+
 +#elif TEST_STD_VER > 26
 +
 +#  ifndef __cpp_lib_span
@@ -6536,13 +7161,6 @@ index 28c54acd0fda..c21f9c9ebabe 100644
 +#  endif
 +#  if __cpp_lib_span_at != 202311L
 +#    error "__cpp_lib_span_at should have the value 202311L in c++29"
-+#  endif
-+
-+#  ifndef __cpp_lib_span_initializer_list
-+#    error "__cpp_lib_span_initializer_list should be defined in c++29"
-+#  endif
-+#  if __cpp_lib_span_initializer_list != 202311L
-+#    error "__cpp_lib_span_initializer_list should have the value 202311L in c++29"
 +#  endif
 +
 +#endif // TEST_STD_VER > 26
@@ -7548,7 +8166,7 @@ index d1c1335df7c8..a4f861ce9ae1 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/utility.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/utility.version.compile.pass.cpp
-index 8cbd16d242f7..bdb3deb9441a 100644
+index 8cbd16d242f7..0c7124a969ba 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/utility.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/utility.version.compile.pass.cpp
 @@ -392,7 +392,7 @@
@@ -7560,7 +8178,7 @@ index 8cbd16d242f7..bdb3deb9441a 100644
  
  #  ifndef __cpp_lib_as_const
  #    error "__cpp_lib_as_const should be defined in c++26"
-@@ -498,6 +498,105 @@
+@@ -498,6 +498,112 @@
  #    error "__cpp_lib_unreachable should have the value 202202L in c++26"
  #  endif
  
@@ -7572,6 +8190,13 @@ index 8cbd16d242f7..bdb3deb9441a 100644
 +#  endif
 +#  if __cpp_lib_as_const != 201510L
 +#    error "__cpp_lib_as_const should have the value 201510L in c++29"
++#  endif
++
++#  ifndef __cpp_lib_constant_wrapper
++#    error "__cpp_lib_constant_wrapper should be defined in c++29"
++#  endif
++#  if __cpp_lib_constant_wrapper != 202603L
++#    error "__cpp_lib_constant_wrapper should have the value 202603L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_constexpr_algorithms
@@ -7796,10 +8421,10 @@ index e34800a89c95..354a5b1fdd4d 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/version.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/version.version.compile.pass.cpp
-index 3f15dd2fd1d0..61798c57d20f 100644
+index d9c78b73f7e2..5b97563c66ea 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/version.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/version.version.compile.pass.cpp
-@@ -300,6 +300,10 @@
+@@ -304,6 +304,10 @@
  #    error "__cpp_lib_destroying_delete should not be defined before c++20"
  #  endif
  
@@ -7810,7 +8435,7 @@ index 3f15dd2fd1d0..61798c57d20f 100644
  #  ifdef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should not be defined before c++17"
  #  endif
-@@ -1228,6 +1232,10 @@
+@@ -1240,6 +1244,10 @@
  #    error "__cpp_lib_destroying_delete should not be defined before c++20"
  #  endif
  
@@ -7821,7 +8446,7 @@ index 3f15dd2fd1d0..61798c57d20f 100644
  #  ifdef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should not be defined before c++17"
  #  endif
-@@ -2258,6 +2266,10 @@
+@@ -2278,6 +2286,10 @@
  #    error "__cpp_lib_destroying_delete should not be defined before c++20"
  #  endif
  
@@ -7832,7 +8457,7 @@ index 3f15dd2fd1d0..61798c57d20f 100644
  #  ifndef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should be defined in c++17"
  #  endif
-@@ -3561,6 +3573,10 @@
+@@ -3589,6 +3601,10 @@
  #    endif
  #  endif
  
@@ -7843,7 +8468,7 @@ index 3f15dd2fd1d0..61798c57d20f 100644
  #  ifndef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should be defined in c++20"
  #  endif
-@@ -5053,6 +5069,10 @@
+@@ -5089,6 +5105,10 @@
  #    endif
  #  endif
  
@@ -7854,7 +8479,7 @@ index 3f15dd2fd1d0..61798c57d20f 100644
  #  ifndef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should be defined in c++23"
  #  endif
-@@ -6245,7 +6265,7 @@
+@@ -6288,7 +6308,7 @@
  #    error "__cpp_lib_void_t should have the value 201411L in c++23"
  #  endif
  
@@ -7863,7 +8488,7 @@ index 3f15dd2fd1d0..61798c57d20f 100644
  
  #  ifndef __cpp_lib_adaptor_iterator_pair_constructor
  #    error "__cpp_lib_adaptor_iterator_pair_constructor should be defined in c++26"
-@@ -6809,6 +6829,10 @@
+@@ -6859,6 +6879,10 @@
  #    endif
  #  endif
  
@@ -7874,7 +8499,7 @@ index 3f15dd2fd1d0..61798c57d20f 100644
  #  ifndef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should be defined in c++26"
  #  endif
-@@ -8259,6 +8283,2013 @@
+@@ -8310,6 +8334,2041 @@
  #    error "__cpp_lib_void_t should have the value 201411L in c++26"
  #  endif
  
@@ -8021,8 +8646,8 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#  ifndef __cpp_lib_atomic_ref
 +#    error "__cpp_lib_atomic_ref should be defined in c++29"
 +#  endif
-+#  if __cpp_lib_atomic_ref != 202411L
-+#    error "__cpp_lib_atomic_ref should have the value 202411L in c++29"
++#  if __cpp_lib_atomic_ref != 202603L
++#    error "__cpp_lib_atomic_ref should have the value 202603L in c++29"
 +#  endif
 +
 +#  if !defined(_LIBCPP_VERSION)
@@ -8197,6 +8822,13 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#    error "__cpp_lib_concepts should have the value 202207L in c++29"
 +#  endif
 +
++#  ifndef __cpp_lib_constant_wrapper
++#    error "__cpp_lib_constant_wrapper should be defined in c++29"
++#  endif
++#  if __cpp_lib_constant_wrapper != 202603L
++#    error "__cpp_lib_constant_wrapper should have the value 202603L in c++29"
++#  endif
++
 +#  ifndef __cpp_lib_constexpr_algorithms
 +#    error "__cpp_lib_constexpr_algorithms should be defined in c++29"
 +#  endif
@@ -8285,6 +8917,13 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#  endif
 +#  if __cpp_lib_constexpr_list != 202502L
 +#    error "__cpp_lib_constexpr_list should have the value 202502L in c++29"
++#  endif
++
++#  ifndef __cpp_lib_constexpr_map
++#    error "__cpp_lib_constexpr_map should be defined in c++29"
++#  endif
++#  if __cpp_lib_constexpr_map != 202502L
++#    error "__cpp_lib_constexpr_map should have the value 202502L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_constexpr_memory
@@ -8436,11 +9075,17 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#    endif
 +#  endif
 +
-+#  ifndef __cpp_lib_embed
-+#    error "__cpp_lib_embed should be defined in c++29"
-+#  endif
-+#  if __cpp_lib_embed != 202606L
-+#    error "__cpp_lib_embed should have the value 202606L in c++29"
++#  if __has_builtin(__builtin_std_embed)  && _LIBCPP_STD_VER > 26
++#    ifndef __cpp_lib_embed
++#      error "__cpp_lib_embed should be defined in c++29"
++#    endif
++#    if __cpp_lib_embed != 202606L
++#      error "__cpp_lib_embed should have the value 202606L in c++29"
++#    endif
++#  else
++#    ifdef __cpp_lib_embed
++#      error "__cpp_lib_embed should not be defined when the requirement '__has_builtin(__builtin_std_embed)  && _LIBCPP_STD_VER > 26' is not met!"
++#    endif
 +#  endif
 +
 +#  ifndef __cpp_lib_enable_shared_from_this
@@ -9302,17 +9947,11 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#    error "__cpp_lib_ranges_chunk_by should have the value 202202L in c++29"
 +#  endif
 +
-+#  if !defined(_LIBCPP_VERSION)
-+#    ifndef __cpp_lib_ranges_concat
-+#      error "__cpp_lib_ranges_concat should be defined in c++29"
-+#    endif
-+#    if __cpp_lib_ranges_concat != 202403L
-+#      error "__cpp_lib_ranges_concat should have the value 202403L in c++29"
-+#    endif
-+#  else
-+#    ifdef __cpp_lib_ranges_concat
-+#      error "__cpp_lib_ranges_concat should not be defined because it is unimplemented in libc++!"
-+#    endif
++#  ifndef __cpp_lib_ranges_concat
++#    error "__cpp_lib_ranges_concat should be defined in c++29"
++#  endif
++#  if __cpp_lib_ranges_concat != 202403L
++#    error "__cpp_lib_ranges_concat should have the value 202403L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_ranges_contains
@@ -9322,11 +9961,25 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#    error "__cpp_lib_ranges_contains should have the value 202207L in c++29"
 +#  endif
 +
++#  ifndef __cpp_lib_ranges_enumerate
++#    error "__cpp_lib_ranges_enumerate should be defined in c++29"
++#  endif
++#  if __cpp_lib_ranges_enumerate != 202302L
++#    error "__cpp_lib_ranges_enumerate should have the value 202302L in c++29"
++#  endif
++
 +#  ifndef __cpp_lib_ranges_find_last
 +#    error "__cpp_lib_ranges_find_last should be defined in c++29"
 +#  endif
 +#  if __cpp_lib_ranges_find_last != 202207L
 +#    error "__cpp_lib_ranges_find_last should have the value 202207L in c++29"
++#  endif
++
++#  ifndef __cpp_lib_ranges_fold
++#    error "__cpp_lib_ranges_fold should be defined in c++29"
++#  endif
++#  if __cpp_lib_ranges_fold != 202207L
++#    error "__cpp_lib_ranges_fold should have the value 202207L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_ranges_indices
@@ -9375,6 +10028,13 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#  endif
 +#  if __cpp_lib_ranges_starts_ends_with != 202106L
 +#    error "__cpp_lib_ranges_starts_ends_with should have the value 202106L in c++29"
++#  endif
++
++#  ifndef __cpp_lib_ranges_stride
++#    error "__cpp_lib_ranges_stride should be defined in c++29"
++#  endif
++#  if __cpp_lib_ranges_stride != 202207L
++#    error "__cpp_lib_ranges_stride should have the value 202207L in c++29"
 +#  endif
 +
 +#  ifndef __cpp_lib_ranges_to_container
@@ -9469,8 +10129,8 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#  ifndef __cpp_lib_saturation_arithmetic
 +#    error "__cpp_lib_saturation_arithmetic should be defined in c++29"
 +#  endif
-+#  if __cpp_lib_saturation_arithmetic != 202311L
-+#    error "__cpp_lib_saturation_arithmetic should have the value 202311L in c++29"
++#  if __cpp_lib_saturation_arithmetic != 202603L
++#    error "__cpp_lib_saturation_arithmetic should have the value 202603L in c++29"
 +#  endif
 +
 +#  if !defined(_LIBCPP_VERSION) || _LIBCPP_HAS_THREADS
@@ -9598,13 +10258,6 @@ index 3f15dd2fd1d0..61798c57d20f 100644
 +#  endif
 +#  if __cpp_lib_span_at != 202311L
 +#    error "__cpp_lib_span_at should have the value 202311L in c++29"
-+#  endif
-+
-+#  ifndef __cpp_lib_span_initializer_list
-+#    error "__cpp_lib_span_initializer_list should be defined in c++29"
-+#  endif
-+#  if __cpp_lib_span_initializer_list != 202311L
-+#    error "__cpp_lib_span_initializer_list should have the value 202311L in c++29"
 +#  endif
 +
 +#  if !defined(_LIBCPP_VERSION)
@@ -9890,10 +10543,10 @@ index 3f15dd2fd1d0..61798c57d20f 100644
  
  // clang-format on
 diff --git a/libcxx/utils/generate_feature_test_macro_components.py b/libcxx/utils/generate_feature_test_macro_components.py
-index 3770f026009c..30ff46eb8d67 100644
+index d764a1f677ba..db034e6acccd 100644
 --- a/libcxx/utils/generate_feature_test_macro_components.py
 +++ b/libcxx/utils/generate_feature_test_macro_components.py
-@@ -514,6 +514,11 @@ feature_test_macros = [
+@@ -519,6 +519,14 @@ feature_test_macros = [
              "test_suite_guard": "defined(__cpp_impl_destroying_delete) && __cpp_impl_destroying_delete >= 201806L",
              "libcxx_guard": "defined(__cpp_impl_destroying_delete) && __cpp_impl_destroying_delete >= 201806L",
          },
@@ -9901,11 +10554,14 @@ index 3770f026009c..30ff46eb8d67 100644
 +            "name": "__cpp_lib_embed",
 +            "values": {"c++29": 202606},
 +            "headers": ["embed"],
++            # builtin required
++            "test_suite_guard": "__has_builtin(__builtin_std_embed)  && _LIBCPP_STD_VER > 26",
++            "libcxx_guard": "__has_builtin(__builtin_std_embed) && _LIBCPP_STD_VER > 26",
 +        },
          {
              "name": "__cpp_lib_enable_shared_from_this",
              "values": {"c++17": 201603},
-@@ -1559,7 +1564,7 @@ lit_markup = {
+@@ -1568,7 +1576,7 @@ lit_markup = {
  
  
  def get_std_dialects():
@@ -9915,5 +10571,5 @@ index 3770f026009c..30ff46eb8d67 100644
  
  
 -- 
-2.53.0.windows.3
+2.54.0.windows.1
 
