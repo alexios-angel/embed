@@ -1,4 +1,4 @@
-From d0027bf99fe5a5db7e8ee02d73a92c00cc392a8e Mon Sep 17 00:00:00 2001
+From 972a5e82a8cc8630ddc8df16ce087885f0e830bf Mon Sep 17 00:00:00 2001
 From: ThePhD <phdofthehouse@gmail.com>
 Date: Wed, 1 Apr 2026 19:06:16 +0200
 Subject: [PATCH] =?UTF-8?q?[clang][Lex][Sema]=20=E2=9C=A8=20Full=20std::em?=
@@ -29,25 +29,27 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  clang/docs/ReleaseNotes.rst                   |    3 +
  clang/docs/ReleaseNotesTemplate.txt           |    3 +
  clang/include/clang/AST/ASTContext.h          |   15 +
+ clang/include/clang/AST/DeclCXX.h             |    4 +-
  clang/include/clang/AST/Expr.h                |   15 +-
  clang/include/clang/Basic/Builtins.td         |    7 +
  clang/include/clang/Basic/DiagnosticGroups.td |   14 +-
  .../include/clang/Basic/DiagnosticLexKinds.td |    3 +
- .../clang/Basic/DiagnosticSemaKinds.td        |    5 +
+ .../clang/Basic/DiagnosticSemaKinds.td        |    7 +-
  .../clang/Basic/InputDependencyCollection.h   |   72 +
  clang/include/clang/Basic/LangOptions.def     |    1 +
  clang/include/clang/Basic/LangStandard.h      |   28 +-
  clang/include/clang/Basic/LangStandards.def   |   21 +-
  clang/include/clang/Basic/ResourceSearch.h    |   37 +
- clang/include/clang/Basic/TokenKinds.def      |    2 +
+ clang/include/clang/Basic/TokenKinds.def      |    3 +
  clang/include/clang/Lex/PPCallbacks.h         |   18 +
  clang/include/clang/Lex/Preprocessor.h        |   11 +
  clang/include/clang/Parse/Parser.h            |    5 +
  clang/include/clang/Sema/Sema.h               |   11 +-
  clang/lib/AST/ASTContext.cpp                  |   14 +
  clang/lib/AST/ASTImporter.cpp                 |    3 +-
- clang/lib/AST/Expr.cpp                        |   14 +-
- clang/lib/AST/ExprConstant.cpp                |  363 ++-
+ clang/lib/AST/ByteCode/Compiler.cpp           |    2 +-
+ clang/lib/AST/Expr.cpp                        |   17 +-
+ clang/lib/AST/ExprConstant.cpp                |  366 ++-
  clang/lib/AST/StmtPrinter.cpp                 |    9 +-
  clang/lib/Basic/CMakeLists.txt                |    2 +
  clang/lib/Basic/IdentifierTable.cpp           |    1 +
@@ -59,7 +61,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  clang/lib/Frontend/DependencyFile.cpp         |  101 +-
  clang/lib/Lex/PPDirectives.cpp                |  116 +-
  clang/lib/Lex/Preprocessor.cpp                |   32 +
- clang/lib/Parse/ParseExpr.cpp                 |   26 +-
+ clang/lib/Parse/ParseExpr.cpp                 |   31 +-
  clang/lib/Sema/SemaChecking.cpp               |  140 ++
  clang/lib/Sema/SemaExpr.cpp                   |   30 +-
  clang/lib/Sema/TreeTransform.h                |   11 +-
@@ -76,7 +78,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../consteval-builtin-std-embed-errors.cpp    |   40 +
  ...consteval-builtin-std-embed-local_file.cpp |   73 +
  .../SemaCXX/consteval-builtin-std-embed.cpp   |  192 ++
- clang/test/SemaCXX/source_location.cpp        |   31 +
+ clang/test/SemaCXX/source_location.cpp        |   34 +
  .../clang-import-test/clang-import-test.cpp   |    2 +
  clang/unittests/Lex/PPCallbacksTest.cpp       |    1 +
  clang/www/OpenProjects.html                   |    2 +-
@@ -88,7 +90,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  libcxx/docs/Status/Cxx2dPapers.csv            |    3 +
  libcxx/include/CMakeLists.txt                 |    1 +
  libcxx/include/__configuration/language.h     |    6 +-
- libcxx/include/embed                          |  268 +++
+ libcxx/include/embed                          |  290 +++
  libcxx/include/version                        |    7 +
  libcxx/modules/std.cppm.in                    |    1 +
  libcxx/test/std/embed/a.txt                   |    1 +
@@ -173,7 +175,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../vector.version.compile.pass.cpp           |   61 +-
  .../version.version.compile.pass.cpp          | 2063 ++++++++++++++++-
  .../generate_feature_test_macro_components.py |   10 +-
- 149 files changed, 7722 insertions(+), 277 deletions(-)
+ 151 files changed, 7760 insertions(+), 284 deletions(-)
  create mode 100644 clang/include/clang/Basic/InputDependencyCollection.h
  create mode 100644 clang/include/clang/Basic/ResourceSearch.h
  create mode 100644 clang/lib/Basic/InputDependencyCollection.cpp
@@ -220,25 +222,25 @@ index d8c70bdc43b1..c4dcca3d093f 100644
  
   Supported values for the OpenCL language are:
 diff --git a/clang/docs/LanguageExtensions.rst b/clang/docs/LanguageExtensions.rst
-index f378a73c20de..4eeea63cad9f 100644
+index 11cfd34d051d..a1b2862c797d 100644
 --- a/clang/docs/LanguageExtensions.rst
 +++ b/clang/docs/LanguageExtensions.rst
-@@ -5433,6 +5433,8 @@ these builtins are also implemented by GCC.
+@@ -5437,6 +5437,8 @@ these builtins are also implemented by GCC.
    unsigned    __builtin_LINE();
    unsigned    __builtin_COLUMN(); // Clang only
    const std::source_location::__impl *__builtin_source_location();
-+  const std::source_location::__impl *__builtin_source_location(
++  const std::source_location::__impl *__builtin_source_location_at(
 +    unsigned long long distance); // Clang only
  
  **Example of use**:
  
-@@ -5487,6 +5489,103 @@ defined, and must contain exactly four fields: ``const char *_M_file_name``,
+@@ -5491,6 +5493,103 @@ defined, and must contain exactly four fields: ``const char *_M_file_name``,
  manner as the above four builtins, except that ``_M_function_name`` is populated
  with ``__PRETTY_FUNCTION__`` rather than ``__FUNCTION__``.
  
-+The second overload of the builtin ``__builtin_source_location`` attempts to
-+"walk" up the stack that many call stack locations in order retrieve that
-+location. It is usable and only meaningful within constant evaluation.
++The builtin ``__builtin_source_location_at`` attempts to "walk" up the stack
++by ``distance`` that many call stack locations in order retrieve thatclocation.
++It is usable and only meaningful within constant evaluation.
 +
 +
 +Data embedding builtin ``__builtin_std_embed``
@@ -337,7 +339,7 @@ index f378a73c20de..4eeea63cad9f 100644
  Alignment builtins
  ------------------
 diff --git a/clang/docs/ReleaseNotes.rst b/clang/docs/ReleaseNotes.rst
-index 8a6eb2003e5f..0dfbb7a4f745 100644
+index 69687db1bbed..64fc10235d28 100644
 --- a/clang/docs/ReleaseNotes.rst
 +++ b/clang/docs/ReleaseNotes.rst
 @@ -193,6 +193,9 @@ C++ Language Changes
@@ -418,17 +420,32 @@ index a4ed852d3644..8e72b4ad196f 100644
    /// Attach an external AST source to the AST context.
    ///
    /// The external AST source provides the ability to load parts of
+diff --git a/clang/include/clang/AST/DeclCXX.h b/clang/include/clang/AST/DeclCXX.h
+index 28d171253dc0..55bb4048ee68 100644
+--- a/clang/include/clang/AST/DeclCXX.h
++++ b/clang/include/clang/AST/DeclCXX.h
+@@ -4466,8 +4466,8 @@ public:
+ /// uniquified by value within a translation unit.
+ ///
+ /// These is currently only used to back the LValue returned by
+-/// __builtin_source_location, but could potentially be used for other similar
+-/// situations in the future.
++/// __builtin_source_location and __builtin_source_location_at, but could
++/// potentially be used for other similar situations in the future.
+ class UnnamedGlobalConstantDecl : public ValueDecl,
+                                   public Mergeable<UnnamedGlobalConstantDecl>,
+                                   public llvm::FoldingSetNode {
 diff --git a/clang/include/clang/AST/Expr.h b/clang/include/clang/AST/Expr.h
-index eeac69cb1d0e..82f39f8ebce3 100644
+index 7c94c4d35641..048730cda990 100644
 --- a/clang/include/clang/AST/Expr.h
 +++ b/clang/include/clang/AST/Expr.h
-@@ -5016,23 +5016,27 @@ enum class SourceLocIdentKind {
+@@ -5019,23 +5019,27 @@ enum class SourceLocIdentKind {
  
  /// Represents a function call to one of __builtin_LINE(), __builtin_COLUMN(),
  /// __builtin_FUNCTION(), __builtin_FUNCSIG(), __builtin_FILE(),
 -/// __builtin_FILE_NAME() or __builtin_source_location().
 +/// __builtin_FILE_NAME(), __builtin_source_location(), or
-+/// __builtin_source_location(unsigned long long distance).
++/// __builtin_source_location_at(unsigned long long distance).
  class SourceLocExpr final : public Expr {
    SourceLocation BuiltinLoc, RParenLoc;
    DeclContext *ParentContext;
@@ -454,7 +471,7 @@ index eeac69cb1d0e..82f39f8ebce3 100644
  
    /// Return a string representing the name of the specific builtin function.
    StringRef getBuiltinStr() const;
-@@ -5061,6 +5065,9 @@ public:
+@@ -5064,6 +5068,9 @@ public:
    const DeclContext *getParentContext() const { return ParentContext; }
    DeclContext *getParentContext() { return ParentContext; }
  
@@ -465,7 +482,7 @@ index eeac69cb1d0e..82f39f8ebce3 100644
    SourceLocation getBeginLoc() const { return BuiltinLoc; }
    SourceLocation getEndLoc() const { return RParenLoc; }
 diff --git a/clang/include/clang/Basic/Builtins.td b/clang/include/clang/Basic/Builtins.td
-index 053a257ba6d4..f7a572e4f53d 100644
+index 63cdb787bea1..ce0c493f8fd2 100644
 --- a/clang/include/clang/Basic/Builtins.td
 +++ b/clang/include/clang/Basic/Builtins.td
 @@ -1219,6 +1219,13 @@ def GetVtablePointer : LangBuiltin<"CXX_LANG"> {
@@ -548,7 +565,7 @@ index 383bf1a7fdb3..2fd3f3822664 100644
  def err_pp_missing_macro_name : Error<"macro name missing">;
  def err_pp_missing_rparen_in_macro_def : Error<
 diff --git a/clang/include/clang/Basic/DiagnosticSemaKinds.td b/clang/include/clang/Basic/DiagnosticSemaKinds.td
-index f84cd8dca6d4..b020f431af68 100644
+index f7fba8df1e4d..227849690a64 100644
 --- a/clang/include/clang/Basic/DiagnosticSemaKinds.td
 +++ b/clang/include/clang/Basic/DiagnosticSemaKinds.td
 @@ -852,6 +852,11 @@ def err_builtin_definition : Error<"definition of builtin function %0">;
@@ -563,6 +580,15 @@ index f84cd8dca6d4..b020f431af68 100644
  def err_arm_invalid_specialreg : Error<"invalid special register for builtin">;
  def err_arm_invalid_coproc : Error<"coprocessor %0 must be configured as "
    "%select{GCP|CDE}1">;
+@@ -13621,7 +13626,7 @@ def err_riscv_attribute_interrupt_invalid_combination : Error<
+ def err_riscv_builtin_invalid_twiden : Error<"RISC-V XSfmm twiden must be 1, 2 or 4">;
+ 
+ def err_std_source_location_impl_not_found : Error<
+-  "'std::source_location::__impl' was not found; it must be defined before '__builtin_source_location' is called">;
++  "'std::source_location::__impl' was not found; it must be defined before '__builtin_source_location' or '__builtin_source_location_at' are called">;
+ def err_std_source_location_impl_malformed : Error<
+   "'std::source_location::__impl' must be standard-layout and have only two 'const char *' fields '_M_file_name' and '_M_function_name', and two integral fields '_M_line' and '_M_column'">;
+ 
 diff --git a/clang/include/clang/Basic/InputDependencyCollection.h b/clang/include/clang/Basic/InputDependencyCollection.h
 new file mode 100644
 index 000000000000..8ca46f8d78a9
@@ -642,7 +668,7 @@ index 000000000000..8ca46f8d78a9
 +
 +#endif
 diff --git a/clang/include/clang/Basic/LangOptions.def b/clang/include/clang/Basic/LangOptions.def
-index 75267ffea941..176ee5d8a301 100644
+index 319fd18cddb3..9755074fd383 100644
 --- a/clang/include/clang/Basic/LangOptions.def
 +++ b/clang/include/clang/Basic/LangOptions.def
 @@ -57,6 +57,7 @@ LANGOPT(CPlusPlus17       , 1, 0, NotCompatible, "C++17")
@@ -782,7 +808,7 @@ index 000000000000..094bd2bafb9b
 +
 +#endif
 diff --git a/clang/include/clang/Basic/TokenKinds.def b/clang/include/clang/Basic/TokenKinds.def
-index f07d8ebb7503..a6dafffe5a3c 100644
+index f07d8ebb7503..c382522efdf2 100644
 --- a/clang/include/clang/Basic/TokenKinds.def
 +++ b/clang/include/clang/Basic/TokenKinds.def
 @@ -132,6 +132,8 @@ PPKEYWORD(pragma)
@@ -794,6 +820,14 @@ index f07d8ebb7503..a6dafffe5a3c 100644
  
  // C++20 Module Directive
  PPKEYWORD(module)
+@@ -479,6 +481,7 @@ KEYWORD(__builtin_FUNCSIG           , KEYMS)
+ KEYWORD(__builtin_LINE              , KEYALL)
+ KEYWORD(__builtin_COLUMN            , KEYALL)
+ KEYWORD(__builtin_source_location   , KEYCXX)
++KEYWORD(__builtin_source_location_at, KEYCXX)
+ 
+ // __builtin_types_compatible_p is a GNU C extension that we handle like a C++
+ // type trait.
 diff --git a/clang/include/clang/Lex/PPCallbacks.h b/clang/include/clang/Lex/PPCallbacks.h
 index 2f62fa8d52b1..df0798391d49 100644
 --- a/clang/include/clang/Lex/PPCallbacks.h
@@ -881,7 +915,7 @@ index 8b684e85eb1c..e373c953e8a3 100644
    void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok);
    void HandleEmbedDirectiveImpl(SourceLocation HashLoc,
 diff --git a/clang/include/clang/Parse/Parser.h b/clang/include/clang/Parse/Parser.h
-index 5e7af97feeb6..aed8b43971c1 100644
+index 5e7af97feeb6..059edafc6ec6 100644
 --- a/clang/include/clang/Parse/Parser.h
 +++ b/clang/include/clang/Parse/Parser.h
 @@ -3897,6 +3897,7 @@ private:
@@ -896,7 +930,7 @@ index 5e7af97feeb6..aed8b43971c1 100644
    /// [GNU]   '__builtin_LINE' '(' ')'
    /// [CLANG] '__builtin_COLUMN' '(' ')'
    /// [GNU]   '__builtin_source_location' '(' ')'
-+  /// [CLANG] '__builtin_source_location' '(' assign-expr ')'
++  /// [CLANG] '__builtin_source_location_at' '(' assign-expr ')'
    /// [GNU]   '__builtin_types_compatible_p' '(' type-name ',' type-name ')'
    /// [GNU]   '__null'
    /// [OBJC]  '[' objc-message-expr ']'
@@ -912,7 +946,7 @@ index 5e7af97feeb6..aed8b43971c1 100644
    /// [GNU]   '__builtin_LINE' '(' ')'
    /// [CLANG] '__builtin_COLUMN' '(' ')'
    /// [GNU]   '__builtin_source_location' '(' ')'
-+  /// [CLANG] '__builtin_source_location' '(' assign-expr ')'
++  /// [CLANG] '__builtin_source_location_at' '(' assign-expr ')'
    /// [OCL]   '__builtin_astype' '(' assignment-expression ',' type-name ')'
    ///
    /// [GNU] offsetof-member-designator:
@@ -925,7 +959,7 @@ index 5e7af97feeb6..aed8b43971c1 100644
  
    /// Parse a __builtin_sycl_unique_stable_name expression.  Accepts a type-id
 diff --git a/clang/include/clang/Sema/Sema.h b/clang/include/clang/Sema/Sema.h
-index b8d760e7e097..6c2e429bb654 100644
+index b8d760e7e097..c0570d2dc83e 100644
 --- a/clang/include/clang/Sema/Sema.h
 +++ b/clang/include/clang/Sema/Sema.h
 @@ -3053,6 +3053,7 @@ private:
@@ -942,7 +976,7 @@ index b8d760e7e097..6c2e429bb654 100644
    // __builtin_LINE(), __builtin_FUNCTION(), __builtin_FUNCSIG(),
 -  // __builtin_FILE(), __builtin_COLUMN(), __builtin_source_location()
 +  // __builtin_FILE(), __builtin_COLUMN(), __builtin_source_location(),
-+  // __builtin_source_location(unsigned distance)
++  // __builtin_source_location_at(unsigned long long distance)
    ExprResult ActOnSourceLocExpr(SourceLocIdentKind Kind,
 -                                SourceLocation BuiltinLoc,
 -                                SourceLocation RPLoc);
@@ -1007,8 +1041,21 @@ index 567d2d07298a..73437bef46a8 100644
  }
  
  ExpectedStmt ASTNodeImporter::VisitVAArgExpr(VAArgExpr *E) {
+diff --git a/clang/lib/AST/ByteCode/Compiler.cpp b/clang/lib/AST/ByteCode/Compiler.cpp
+index 9444eeb0c2ad..f4c91c180325 100644
+--- a/clang/lib/AST/ByteCode/Compiler.cpp
++++ b/clang/lib/AST/ByteCode/Compiler.cpp
+@@ -3735,7 +3735,7 @@ bool Compiler<Emitter>::VisitSourceLocExpr(const SourceLocExpr *E) {
+     return this->visit(LValueExpr);
+ 
+   // Otherwise, we have a decl (which is the case for
+-  // __builtin_source_location).
++  // __builtin_source_location/__builtin_source_location_at).
+   assert(Base.is<const ValueDecl *>());
+   assert(Val.getLValuePath().size() == 0);
+   const auto *BaseDecl = Base.dyn_cast<const ValueDecl *>();
 diff --git a/clang/lib/AST/Expr.cpp b/clang/lib/AST/Expr.cpp
-index 1bafc4708a30..d19cfa6ec5cb 100644
+index 1bafc4708a30..d6253c2eff29 100644
 --- a/clang/lib/AST/Expr.cpp
 +++ b/clang/lib/AST/Expr.cpp
 @@ -2256,9 +2256,11 @@ bool BinaryOperator::isNullPointerArithmeticExtension(ASTContext &Ctx,
@@ -1025,7 +1072,14 @@ index 1bafc4708a30..d19cfa6ec5cb 100644
    SourceLocExprBits.Kind = llvm::to_underlying(Kind);
    // In dependent contexts, function names may change.
    setDependence(MayBeDependent(Kind) && ParentContext->isDependentContext()
-@@ -2286,8 +2288,9 @@ StringRef SourceLocExpr::getBuiltinStr() const {
+@@ -2281,13 +2283,15 @@ StringRef SourceLocExpr::getBuiltinStr() const {
+   case SourceLocIdentKind::Column:
+     return "__builtin_COLUMN";
+   case SourceLocIdentKind::SourceLocStruct:
+-    return "__builtin_source_location";
++    return CallStackDistance ? "__builtin_source_location_at"
++                             : "__builtin_source_location";
+   }
    llvm_unreachable("unexpected IdentKind!");
  }
  
@@ -1037,7 +1091,7 @@ index 1bafc4708a30..d19cfa6ec5cb 100644
    SourceLocation Loc;
    const DeclContext *Context;
  
-@@ -2302,6 +2305,9 @@ APValue SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
+@@ -2302,6 +2306,9 @@ APValue SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
      Loc = getLocation();
      Context = getParentContext();
    }
@@ -1048,7 +1102,7 @@ index 1bafc4708a30..d19cfa6ec5cb 100644
    // If we are currently parsing a lambda declarator, we might not have a fully
    // formed call operator declaration yet, and we could not form a function name
 diff --git a/clang/lib/AST/ExprConstant.cpp b/clang/lib/AST/ExprConstant.cpp
-index bc98c0d86bb6..b78d67bd0ddb 100644
+index f7d63d91737c..d3a9021f9733 100644
 --- a/clang/lib/AST/ExprConstant.cpp
 +++ b/clang/lib/AST/ExprConstant.cpp
 @@ -53,13 +53,18 @@
@@ -1070,7 +1124,17 @@ index bc98c0d86bb6..b78d67bd0ddb 100644
  #include "llvm/Support/Debug.h"
  #include "llvm/Support/SaveAndRestore.h"
  #include "llvm/Support/SipHash.h"
-@@ -3540,13 +3545,17 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
+@@ -1994,7 +1999,8 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
+   // Block variables at global or local static scope.
+   case Expr::BlockExprClass:
+     return !cast<BlockExpr>(E)->getBlockDecl()->hasCaptures();
+-  // The APValue generated from a __builtin_source_location will be emitted as a
++  // The APValue generated from a
++  // __builtin_source_location/__builtin_source_location_at will be emitted as a
+   // literal.
+   case Expr::SourceLocExprClass:
+     return true;
+@@ -3542,13 +3548,17 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
    if (auto PE = dyn_cast<PredefinedExpr>(Lit))
      Lit = PE->getFunctionName();
    const StringLiteral *S = cast<StringLiteral>(Lit);
@@ -1090,7 +1154,7 @@ index bc98c0d86bb6..b78d67bd0ddb 100644
    if (Index < S->getLength())
      Value = S->getCodeUnit(Index);
    return Value;
-@@ -9968,8 +9977,36 @@ public:
+@@ -9971,8 +9981,36 @@ public:
  
    bool VisitSourceLocExpr(const SourceLocExpr *E) {
      assert(!E->isIntType() && "SourceLocExpr isn't a pointer type?");
@@ -1128,7 +1192,7 @@ index bc98c0d86bb6..b78d67bd0ddb 100644
      Result.setFrom(Info.Ctx, LValResult);
      return true;
    }
-@@ -10704,7 +10741,324 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
+@@ -10707,7 +10745,324 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
          return false;
      }
    }
@@ -1453,7 +1517,7 @@ index bc98c0d86bb6..b78d67bd0ddb 100644
    default:
      return false;
    }
-@@ -15449,7 +15803,8 @@ public:
+@@ -15456,7 +15811,8 @@ public:
    bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
      assert(E->getType()->isIntegralOrEnumerationType() &&
             "Invalid evaluation result.");
@@ -1936,7 +2000,7 @@ index 8aee45b5dc64..6daddda4f3c8 100644
  }
  
 diff --git a/clang/lib/Frontend/DependencyFile.cpp b/clang/lib/Frontend/DependencyFile.cpp
-index d56e17f14e9b..ac531b686923 100644
+index 00f4a54269cf..68263d0f17f7 100644
 --- a/clang/lib/Frontend/DependencyFile.cpp
 +++ b/clang/lib/Frontend/DependencyFile.cpp
 @@ -12,6 +12,7 @@
@@ -2278,23 +2342,40 @@ index 1e21b4a94cea..59f62e9df4fa 100644
    // case, glue the tokens together into an angle_string_literal token.
    SmallString<128> FilenameBuffer;
 diff --git a/clang/lib/Parse/ParseExpr.cpp b/clang/lib/Parse/ParseExpr.cpp
-index 2987d32d6e0d..73c6d9a703ef 100644
+index 2987d32d6e0d..4d33a9c1759a 100644
 --- a/clang/lib/Parse/ParseExpr.cpp
 +++ b/clang/lib/Parse/ParseExpr.cpp
-@@ -2609,12 +2609,6 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
+@@ -1097,6 +1097,7 @@ Parser::ParseCastExpression(CastParseKind ParseKind, bool isAddressOfOperand,
    case tok::kw___builtin_FUNCSIG:
    case tok::kw___builtin_LINE:
-   case tok::kw___builtin_source_location: {
+   case tok::kw___builtin_source_location:
++  case tok::kw___builtin_source_location_at:
+     if (NotPrimaryExpression)
+       *NotPrimaryExpression = true;
+     // This parses the complete suffix; we can return early.
+@@ -2608,13 +2609,8 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
+   case tok::kw___builtin_FUNCTION:
+   case tok::kw___builtin_FUNCSIG:
+   case tok::kw___builtin_LINE:
+-  case tok::kw___builtin_source_location: {
 -    // Attempt to consume the r-paren.
 -    if (Tok.isNot(tok::r_paren)) {
 -      Diag(Tok, diag::err_expected) << tok::r_paren;
 -      SkipUntil(tok::r_paren, StopAtSemi);
 -      return ExprError();
 -    }
++  case tok::kw___builtin_source_location:
++  case tok::kw___builtin_source_location_at: {
      SourceLocIdentKind Kind = [&] {
        switch (T) {
        case tok::kw___builtin_FILE:
-@@ -2635,7 +2629,25 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
+@@ -2630,12 +2626,31 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
+       case tok::kw___builtin_COLUMN:
+         return SourceLocIdentKind::Column;
+       case tok::kw___builtin_source_location:
++      case tok::kw___builtin_source_location_at:
+         return SourceLocIdentKind::SourceLocStruct;
+       default:
          llvm_unreachable("invalid keyword");
        }
      }();
@@ -2322,10 +2403,10 @@ index 2987d32d6e0d..73c6d9a703ef 100644
    }
    }
 diff --git a/clang/lib/Sema/SemaChecking.cpp b/clang/lib/Sema/SemaChecking.cpp
-index b8a3f48a32f2..c478209ef593 100644
+index ec4a9037f5c2..1036b00a146e 100644
 --- a/clang/lib/Sema/SemaChecking.cpp
 +++ b/clang/lib/Sema/SemaChecking.cpp
-@@ -4027,6 +4027,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
+@@ -4029,6 +4029,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
      if (BuiltinCountedByRef(TheCall))
        return ExprError();
      break;
@@ -2339,7 +2420,7 @@ index b8a3f48a32f2..c478209ef593 100644
    }
  
    if (getLangOpts().HLSL && HLSL().CheckBuiltinFunctionCall(BuiltinID, TheCall))
-@@ -6950,6 +6957,139 @@ bool Sema::BuiltinCountedByRef(CallExpr *TheCall) {
+@@ -6952,6 +6959,139 @@ bool Sema::BuiltinCountedByRef(CallExpr *TheCall) {
    return false;
  }
  
@@ -2480,7 +2561,7 @@ index b8a3f48a32f2..c478209ef593 100644
  /// It allows leaking and modification of bounds safety information.
  bool Sema::CheckInvalidBuiltinCountedByRef(const Expr *E,
 diff --git a/clang/lib/Sema/SemaExpr.cpp b/clang/lib/Sema/SemaExpr.cpp
-index f2745425588f..91a48007e28d 100644
+index 675d0bd389e2..c60ed447620d 100644
 --- a/clang/lib/Sema/SemaExpr.cpp
 +++ b/clang/lib/Sema/SemaExpr.cpp
 @@ -5753,8 +5753,9 @@ struct EnsureImmediateInvocationInDefaultArgs
@@ -3216,10 +3297,10 @@ index 000000000000..4b8352ed896d
 +static_assert(not_depended_on());
 +static_assert(empty());
 diff --git a/clang/test/SemaCXX/source_location.cpp b/clang/test/SemaCXX/source_location.cpp
-index eaa6cb04c5d1..633320c90dbd 100644
+index eaa6cb04c5d1..944dc963dbdd 100644
 --- a/clang/test/SemaCXX/source_location.cpp
 +++ b/clang/test/SemaCXX/source_location.cpp
-@@ -1091,3 +1091,34 @@ namespace GH178324 {
+@@ -1091,3 +1091,37 @@ namespace GH178324 {
    template <class> void c() { decltype(a(current()))::e; }
  } // namespace GH178324
  #endif
@@ -3236,10 +3317,13 @@ index eaa6cb04c5d1..633320c90dbd 100644
 +}
 +
 +constexpr int numeric_sl_b () {
-+	constexpr auto x0 = __builtin_source_location(), x = __builtin_source_location(0);
-+	constexpr auto y = __builtin_source_location(1);
-+	constexpr auto z = __builtin_source_location(2);
-+	static_assert(x0->_M_line == 1107 && x->_M_line == 1107, "line numbers wrong");
++	constexpr auto x0 = __builtin_source_location(), x = __builtin_source_location_at(0);
++	constexpr auto y = __builtin_source_location_at(1);
++	constexpr auto z = __builtin_source_location_at(2);
++	static_assert(x0->_M_line == 1107, "line numbers wrong");
++	static_assert(x->_M_line == 1107, "line numbers wrong");
++	static_assert(y->_M_line == 1118, "line numbers wrong");
++	static_assert(z->_M_line == 1122, "line numbers wrong");
 +	return x->_M_line + y->_M_line + z->_M_line;
 +}
 +
@@ -3249,7 +3333,7 @@ index eaa6cb04c5d1..633320c90dbd 100644
 +
 +constexpr int numeric_sl_a_b () {
 +	constexpr int v = numeric_sl_a();
-+	static_assert(v == (1'107 + 1'115 + 1'119), "line numbers wrong");
++	static_assert(v == (1'107 + 1'118 + 1'122), "line numbers wrong");
 +	return v;
 +}
 +
@@ -3424,10 +3508,10 @@ index 3137ba2ea27e..ebc197515960 100644
  // NOLINTEND(libcpp-cpp-version-check)
 diff --git a/libcxx/include/embed b/libcxx/include/embed
 new file mode 100644
-index 000000000000..265e1e1f9e98
+index 000000000000..c9e28795af0c
 --- /dev/null
 +++ b/libcxx/include/embed
-@@ -0,0 +1,268 @@
+@@ -0,0 +1,290 @@
 +// -*- C++ -*-
 +//===----------------------------------------------------------------------===//
 +//
@@ -3591,6 +3675,12 @@ index 000000000000..265e1e1f9e98
 +inline constexpr unsigned int __quoted_search_distance = 0b101;
 +inline constexpr unsigned int __call_stack_distance    = 0b010;
 +
++#  if defined(__cpp_constexpr_exceptions) && defined(__cpp_exceptions)
++#    define _LIBCPP_EMBED_FAIL_WITH(_TY, _MSG, _LOC) throw _TY(u8##_MSG, _LOC)
++#  else
++#    define _LIBCPP_EMBED_FAIL_WITH(_TY, _MSG, _LOC) _LIBCPP_VERBOSE_ABORT(_MSG)
++#  endif
++
 +template <typename _Byte, size_t _Extent, typename _StrView>
 +[[nodiscard]] consteval _LIBCPP_HIDE_FROM_ABI span<const _Byte, _Extent>
 +__embed(const _StrView& __resource_identifier, size_t __offset, [[maybe_unused]] const optional<size_t>& __limit) {
@@ -3633,18 +3723,30 @@ index 000000000000..265e1e1f9e98
 +  }
 +  if (__status == __file_not_found) {
 +    // FIXME: kind of cheating to use current() to do this, but that's how it is!
-+    auto __builtin_loc = __builtin_source_location(__call_stack_distance);
-+    auto __loc         = source_location::current(__builtin_loc);
-+    throw file_not_found_error(u8"file not found", __loc);
-+  } else if (__status == __file_found_no_depends) {
++#  if __has_builtin(__builtin_source_location_at)
 +    // FIXME: kind of cheating to use current() to do this, but that's how it is!
-+    auto __builtin_loc = __builtin_source_location(__call_stack_distance);
-+    auto __loc         = source_location::current(__builtin_loc);
-+    throw dependency_error(u8"file found but not appropriately '#depend ...'ed on", __loc);
++    auto __builtin_loc          = __builtin_source_location_at(__call_stack_distance);
++    [[maybe_unused]] auto __loc = source_location::current(__builtin_loc);
++#  else
++    [[maybe_unused]] auto __loc = source_location::current();
++#  endif
++    _LIBCPP_EMBED_FAIL_WITH(file_not_found_error, "file not found", __loc);
++  } else if (__status == __file_found_no_depends) {
++#  if __has_builtin(__builtin_source_location_at)
++    // FIXME: kind of cheating to use current() to do this, but that's how it is!
++    auto __builtin_loc          = __builtin_source_location_at(__call_stack_distance);
++    [[maybe_unused]] auto __loc = source_location::current(__builtin_loc);
++#  else
++    [[maybe_unused]] auto __loc = source_location::current();
++#  endif
++    _LIBCPP_EMBED_FAIL_WITH(dependency_error,
++                            "file found but not appropriately '#depend'-ed on",
++                            __loc);
 +  }
 +  if constexpr (_Extent != std::dynamic_extent) {
 +    if (_Extent > __size) {
-+      _LIBCPP_VERBOSE_ABORT("the fixed-size span extent is larger than the resource data size");
++      _LIBCPP_VERBOSE_ABORT("the fixed-size span extent is larger "
++                            "than the resource data size");
 +    }
 +    __size = _Extent;
 +  }
@@ -3656,6 +3758,10 @@ index 000000000000..265e1e1f9e98
 +                 "successful finding of a file with data that has been '#depend <>`-ed on");
 +  return span<const _Byte, _Extent>(__ptr, __size);
 +}
++
++#  undef _LIBCPP_EMBED_FAIL
++#  undef _LIBCPP_EMBED_FAIL_WITH
++
 +} // namespace __embed_detail
 +
 +template <typename _Byte = byte>
@@ -10571,5 +10677,5 @@ index d764a1f677ba..db034e6acccd 100644
  
  
 -- 
-2.54.0.windows.1
+2.54.0
 
