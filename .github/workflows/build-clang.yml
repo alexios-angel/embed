@@ -1,0 +1,84 @@
+name: build-clang-std-embed
+
+# Full LLVM builds are expensive (~2-4 h per platform on hosted runners),
+# so this only runs on demand.
+on:
+  workflow_dispatch:
+
+env:
+  # Upstream llvm/llvm-project commit the std::embed patch is based on.
+  LLVM_BASE: ced9fa35844724063b20d4b0d67a7960247c8067
+  LLVM_PATCH: patches/0002-clang-full-std-embed-and-depend.patch
+
+jobs:
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     name: linux-x86_64 }
+          - { os: ubuntu-24.04-arm, name: linux-aarch64 }
+          - { os: macos-15,         name: macos-arm64 }
+          # Intel macOS runner label; adjust if GitHub retires it.
+          - { os: macos-15-intel,   name: macos-x86_64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Checkout LLVM at pinned base and apply std::embed patch
+        run: |
+          git init llvm-toolchain
+          git -C llvm-toolchain remote add origin https://github.com/llvm/llvm-project.git
+          git -C llvm-toolchain fetch --depth 1 origin "$LLVM_BASE"
+          git -C llvm-toolchain checkout FETCH_HEAD
+          git -C llvm-toolchain apply --verbose "$GITHUB_WORKSPACE/$LLVM_PATCH"
+
+      - name: Build clang
+        run: |
+          # Hosted runners have limited RAM; keep links serialized.
+          LLVM_SRC="$PWD/llvm-toolchain" LINK_JOBS=1 \
+            ./scripts/build-clang/build.sh native
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clang-std-embed-${{ matrix.name }}
+          path: dist/*.tar.xz
+          if-no-files-found: error
+
+  windows-msvc:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ninja
+        run: choco install ninja --no-progress -y
+
+      - name: Checkout LLVM at pinned base and apply std::embed patch
+        shell: pwsh
+        run: |
+          git init llvm-toolchain
+          git -C llvm-toolchain remote add origin https://github.com/llvm/llvm-project.git
+          git -C llvm-toolchain fetch --depth 1 origin "$env:LLVM_BASE"
+          git -C llvm-toolchain checkout FETCH_HEAD
+          git -C llvm-toolchain apply --verbose "$env:GITHUB_WORKSPACE/$env:LLVM_PATCH"
+
+      - name: Build clang
+        shell: pwsh
+        run: |
+          ./scripts/build-clang/build.ps1 -LlvmSrc "$PWD\llvm-toolchain" -LinkJobs 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clang-std-embed-windows-x86_64-msvc
+          path: dist/*.zip
+          if-no-files-found: error
