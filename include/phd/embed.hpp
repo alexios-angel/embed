@@ -106,7 +106,7 @@
 
 namespace phd { inline namespace v0 {
 
-	using embed = ::std::embed;
+	using ::std::embed;
 
 }} // namespace phd::v0
 
@@ -137,11 +137,11 @@ namespace phd { inline namespace v0 {
 	} while (0)
 #endif
 
-#define CONCAT_(_EXTOK, _EYTOK) _EXTOK##_EYTOK
-#define CONCAT (_XTOK, _YTOK) CONCAT_(_EXTOK, _EYTOK)
+#define PHD_EMBED_CONCAT_(_XTOK, _YTOK) _XTOK##_YTOK
+#define PHD_EMBED_CONCAT(_XTOK, _YTOK) PHD_EMBED_CONCAT_(_XTOK, _YTOK)
 
 #if PHD_EMBED_HAS_CONSTEXPR_EXCEPTIONS_I != 0
-#define PHD_EMBED_FAIL_WITH(_TY, _MSG, _LOC) throw _TY(CONCAT(u8, _MSG), _LOC)
+#define PHD_EMBED_FAIL_WITH(_TY, _MSG, _LOC) throw _TY(PHD_EMBED_CONCAT(u8, _MSG), _LOC)
 #else
 #define PHD_EMBED_FAIL_WITH(_TY, _MSG, _LOC) PHD_EMBED_VERBOSE_ABORT(_MSG)
 #endif
@@ -150,7 +150,7 @@ namespace phd {
 
 	class file_not_found_error : public std::exception {
 	private:
-		::std::optional<string> __what;
+		::std::optional<::std::string> __what;
 		::std::u8string __u8what;
 		::std::source_location __where;
 
@@ -160,7 +160,7 @@ namespace phd {
 		: __what(), __u8what(__in_u8what), __where(std::move(__in_where)) {
 			const ::std::size_t __u8what_size = __u8what.size();
 			__what.emplace(__u8what_size, '\0');
-			string& __wh = *__what;
+			::std::string& __wh = *__what;
 			for (::std::size_t __idx = 0; __idx < __u8what_size; ++__idx)
 				__wh[__idx] = static_cast<char>(__u8what[__idx]);
 		}
@@ -205,7 +205,7 @@ namespace phd {
 			// FIXME: we are just assuming the ordinary literal encoding can handle UTF-8.
 			const ::std::size_t __u8what_size = __u8what.size();
 			__what.emplace(__u8what_size, '\0');
-			string& __wh = *__what;
+			::std::string& __wh = *__what;
 			for (::std::size_t __idx = 0; __idx < __u8what_size; ++__idx)
 				__wh[__idx] = static_cast<char>(__u8what[__idx]);
 		}
@@ -241,6 +241,10 @@ namespace phd {
 
 	namespace __detail {
 		inline constexpr const unsigned int __local_lookup = 0b101u;
+		// how many constexpr call frames __embed sits below the user's
+		// call site: the public embed() wrapper, then __embed itself. This
+		// is the "call-local-distance" half of the locus (locus >> 1).
+		inline constexpr const unsigned long long __call_stack_distance = __local_lookup >> 1u;
 
 		enum __builtin_result {
 			__file_not_found           = 0,
@@ -264,7 +268,7 @@ namespace phd {
 #endif
 			int __status     = -1;
 			const _Ty* __res = nullptr;
-			size_t __res_len = 0;
+			::std::size_t __res_len = 0;
 			if constexpr (_Extent != ::std::dynamic_extent) {
 				__res = __builtin_std_embed(__local_lookup, __status, __res_len, __res, __resource_name.size(),
 				     __resource_name.data(), __offset, _Extent);
@@ -283,9 +287,9 @@ namespace phd {
 #if PHD_EMBED_HAS_BUILTIN_SOURCE_LOCATION_AT_I != 0
 				// FIXME: kind of cheating to use current() to do this, but that's how it is!
 				auto __builtin_loc          = __builtin_source_location_at(__call_stack_distance);
-				[[maybe_unused]] auto __loc = source_location::current(__builtin_loc);
+				[[maybe_unused]] auto __loc = ::std::source_location::current(__builtin_loc);
 #else
-				[[maybe_unused]] auto __loc = source_location::current();
+				[[maybe_unused]] auto __loc = ::std::source_location::current();
 #endif
 				PHD_EMBED_FAIL_WITH(::phd::file_not_found_error, "file not found", __loc);
 			}
@@ -293,9 +297,9 @@ namespace phd {
 #if PHD_EMBED_HAS_BUILTIN_SOURCE_LOCATION_AT_I != 0
 				// FIXME: kind of cheating to use current() to do this, but that's how it is!
 				auto __builtin_loc          = __builtin_source_location_at(__call_stack_distance);
-				[[maybe_unused]] auto __loc = source_location::current(__builtin_loc);
+				[[maybe_unused]] auto __loc = ::std::source_location::current(__builtin_loc);
 #else
-				[[maybe_unused]] auto __loc = source_location::current();
+				[[maybe_unused]] auto __loc = ::std::source_location::current();
 #endif
 				PHD_EMBED_FAIL_WITH(
 				     ::phd::dependency_error, "file found but not appropriately '#depend <>'-ed", __loc);
@@ -368,8 +372,8 @@ namespace phd {
 
 } // namespace phd
 
-#undef CONCAT
-#undef CONCAT_
+#undef PHD_EMBED_CONCAT
+#undef PHD_EMBED_CONCAT_
 #undef PHD_EMBED_FAIL_WITH
 #undef PHD_EMBED_VERBOSE_ABORT
 

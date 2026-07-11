@@ -1,44 +1,27 @@
-From 972a5e82a8cc8630ddc8df16ce087885f0e830bf Mon Sep 17 00:00:00 2001
+From 5f7a550aa92dd4733cbaf8ba5a104c6ae15916c7 Mon Sep 17 00:00:00 2001
 From: ThePhD <phdofthehouse@gmail.com>
-Date: Wed, 1 Apr 2026 19:06:16 +0200
-Subject: [PATCH] =?UTF-8?q?[clang][Lex][Sema]=20=E2=9C=A8=20Full=20std::em?=
- =?UTF-8?q?bed=20and=20#depend=20implementation?=
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+Date: Sat, 11 Jul 2026 04:45:27 -0400
+Subject: [PATCH] [clang][Lex][Sema] Full std::embed and #depend implementation
 
-- [clang][Lex][Sema] 🎨 Change how the builtin returns information by adding a new first argument
-- [libcxx] 🎨 add a proper C++29 / __cplusplus-based version macro (embed is still 1 because even -std=c++2c does not change the value much higher)
-- [clang][Lex][Sema] 🎨 clang-format
-- [clang][Frontend] 🐛 Synchronize with Dependency File Collection Improvements
-- [clang][AST][Sema] 🎨 rename to clang-specific builtin (no real agreement with GCC after all)
-- [clang][doc][AST][Sema] 🎨 managed to make both the same for GCC, we are back on!
-- [libc++][clang][doc][AST] 🎨🐛 synchronize and update return values
-- [clang][doc] 🐛 fix improper string and code quote sequences in builtin std embed documentation
-- [clang][AST][Sema] ✨ Add new locus argument to allow for any implementation to determine how many steps up they want to go in the constexpr callstack
-- [clang][AST][Sema][Frontend] Adjust the dependency file checking to output appropriate data
-- [libc++][clang-SemaCXX][clang-Preprocessor] ✅ Add new tests
-- [clang][Lex] 📝 It turns out Clang does not fully do Preprocessing before doing the rest of processing. That's a bit of a shame.
-- [clang][Frontend] ✨ C++2d flags for when Clang is finally ready
-- [clang] 🎨 apply clang-format and re-run generation files
+Rebased onto llvm/main ced9fa358 for the latest Clang:
+  - dropped the C++2d/C++29 language-mode registration hunks (LangStandards,
+    LangStandard.h, LangOptions, DiagnosticGroups): upstream now provides the
+    c++2d standard mode natively.
+  - DiagnosticLexKinds.td: the #depend extension diagnostic now joins
+    upstream's existing CXX29 diagnostic group (was CXX2D).
+  - ResourceSearch.cpp / DependencyFile.cpp track the current FileManager and
+    DependencyCollector signatures.
 
-Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
+Original work by Bjorkus "ThePhD" Dorkus; see the embed repository.
 ---
- clang/docs/CommandGuide/clang.rst             |    8 +
- clang/docs/LanguageExtensions.rst             |   99 +
- clang/docs/ReleaseNotes.rst                   |    3 +
- clang/docs/ReleaseNotesTemplate.txt           |    3 +
  clang/include/clang/AST/ASTContext.h          |   15 +
  clang/include/clang/AST/DeclCXX.h             |    4 +-
  clang/include/clang/AST/Expr.h                |   15 +-
  clang/include/clang/Basic/Builtins.td         |    7 +
- clang/include/clang/Basic/DiagnosticGroups.td |   14 +-
+ clang/include/clang/Basic/DiagnosticGroups.td |    2 +
  .../include/clang/Basic/DiagnosticLexKinds.td |    3 +
  .../clang/Basic/DiagnosticSemaKinds.td        |    7 +-
  .../clang/Basic/InputDependencyCollection.h   |   72 +
- clang/include/clang/Basic/LangOptions.def     |    1 +
- clang/include/clang/Basic/LangStandard.h      |   28 +-
- clang/include/clang/Basic/LangStandards.def   |   21 +-
  clang/include/clang/Basic/ResourceSearch.h    |   37 +
  clang/include/clang/Basic/TokenKinds.def      |    3 +
  clang/include/clang/Lex/PPCallbacks.h         |   18 +
@@ -54,7 +37,6 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  clang/lib/Basic/CMakeLists.txt                |    2 +
  clang/lib/Basic/IdentifierTable.cpp           |    1 +
  clang/lib/Basic/InputDependencyCollection.cpp |  241 ++
- clang/lib/Basic/LangOptions.cpp               |    1 +
  clang/lib/Basic/ResourceSearch.cpp            |  112 +
  clang/lib/Frontend/ASTUnit.cpp                |    8 +-
  clang/lib/Frontend/CompilerInstance.cpp       |    2 +
@@ -67,7 +49,6 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  clang/lib/Sema/TreeTransform.h                |   11 +-
  clang/lib/Serialization/ASTReaderStmt.cpp     |    1 +
  clang/lib/Serialization/ASTWriterStmt.cpp     |    1 +
- clang/test/Driver/unknown-std.cpp             |    6 +-
  .../Inputs/media/nested/inside.txt            |    1 +
  .../test/Preprocessor/depend-dependencies.cpp |   11 +
  .../depend-export-dependencies.cpp            |   13 +
@@ -81,7 +62,6 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  clang/test/SemaCXX/source_location.cpp        |   34 +
  .../clang-import-test/clang-import-test.cpp   |    2 +
  clang/unittests/Lex/PPCallbacksTest.cpp       |    1 +
- clang/www/OpenProjects.html                   |    2 +-
  clang/www/cxx_status.html                     |    6 +
  libcxx/docs/FeatureTestMacroTable.rst         |    4 +
  libcxx/docs/Status/Cxx2d.rst                  |   43 +
@@ -175,7 +155,7 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  .../vector.version.compile.pass.cpp           |   61 +-
  .../version.version.compile.pass.cpp          | 2063 ++++++++++++++++-
  .../generate_feature_test_macro_components.py |   10 +-
- 151 files changed, 7760 insertions(+), 284 deletions(-)
+ 141 files changed, 7598 insertions(+), 262 deletions(-)
  create mode 100644 clang/include/clang/Basic/InputDependencyCollection.h
  create mode 100644 clang/include/clang/Basic/ResourceSearch.h
  create mode 100644 clang/lib/Basic/InputDependencyCollection.cpp
@@ -202,172 +182,8 @@ Signed-off-by: Bjorkus "ThePhD" Dorkus <phdofthehouse@gmail.com>
  create mode 100644 libcxx/test/std/embed/empty
  create mode 100644 libcxx/test/std/language.support/support.limits/support.limits.general/embed.version.compile.pass.cpp
 
-diff --git a/clang/docs/CommandGuide/clang.rst b/clang/docs/CommandGuide/clang.rst
-index d8c70bdc43b1..c4dcca3d093f 100644
---- a/clang/docs/CommandGuide/clang.rst
-+++ b/clang/docs/CommandGuide/clang.rst
-@@ -226,6 +226,14 @@ Language Selection and Mode Options
- 
-    Working draft for C++2c with GNU extensions
- 
-+  | ``c++2d``
-+
-+   Working draft for C++2d
-+
-+  | ``gnu++2d``
-+
-+   Working draft for C++2d with GNU extensions
-+
-  The default C++ language standard is ``gnu++17``.
- 
-  Supported values for the OpenCL language are:
-diff --git a/clang/docs/LanguageExtensions.rst b/clang/docs/LanguageExtensions.rst
-index 11cfd34d051d..a1b2862c797d 100644
---- a/clang/docs/LanguageExtensions.rst
-+++ b/clang/docs/LanguageExtensions.rst
-@@ -5437,6 +5437,8 @@ these builtins are also implemented by GCC.
-   unsigned    __builtin_LINE();
-   unsigned    __builtin_COLUMN(); // Clang only
-   const std::source_location::__impl *__builtin_source_location();
-+  const std::source_location::__impl *__builtin_source_location_at(
-+    unsigned long long distance); // Clang only
- 
- **Example of use**:
- 
-@@ -5491,6 +5493,103 @@ defined, and must contain exactly four fields: ``const char *_M_file_name``,
- manner as the above four builtins, except that ``_M_function_name`` is populated
- with ``__PRETTY_FUNCTION__`` rather than ``__FUNCTION__``.
- 
-+The builtin ``__builtin_source_location_at`` attempts to "walk" up the stack
-+by ``distance`` that many call stack locations in order retrieve thatclocation.
-+It is usable and only meaningful within constant evaluation.
-+
-+
-+Data embedding builtin ``__builtin_std_embed``
-+----------------------------------------------
-+
-+For use with `p1040's <https://wg21.link/p1040>`_ ``std::embed`` function. It
-+is conceptually (but not exactly) represented by the following template
-+function overloads:
-+
-+**Syntax**
-+
-+.. code-block:: c++
-+
-+  template <class Byte, class Char>
-+  Byte const* __builtin_std_embed(unsigned int locus, int& status,
-+                               size_t& size, T const* indicator_ptr,
-+                               size_t resource_name_size,
-+                               Char const* resource_name_ptr,
-+                               size_t offset);
-+
-+  template <class Byte, class Char>
-+  Byte const* __builtin_std_embed(unsigned int locus, int& status,
-+                               size_t& size, T const* indicator_ptr,
-+                               size_t resource_name_size,
-+                               Char const* resource_name_ptr,
-+                               size_t offset, size_t limit);
-+
-+The ``locus`` argument is always ``1`` and is significant for implementers
-+only. If you are asking the question "am I an implementer?", you are not an
-+implementer and you should be passing in a value equivalent to ``1``. If
-+you can answer this in the affirmative, ``locus`` can be broken down as
-+``do-local-search = (locus & 0x1)`` and ``call-local-distance = (locus >> 1)``.
-+``do-local-search`` is whether or not a search from the local file is performed.
-+``call-stack-distance`` is the distance that this builtin call is removed from
-+where a normal user would be interfacing with this builtin, for the purpose of
-+file search. For example, from within the depths of a ``std::embed`` call,
-+``locus`` would likely be ``0b101`` or ``0b111``.
-+
-+The ``status`` argument is an output parameter status object. It will be
-+filled with:
-+
-+- ``0`` is the file is not found.
-+- ``1`` if the file is found, properly ``#depend``-ed on, and not empty.
-+- ``2`` if the file is found but not suitably ``#depend``-ed on,
-+- or, ``3`` if the file is found, properly ``#depend``-ed on, but it was empty.
-+
-+The ``size`` argument is an output parameter for the number of elements pointed
-+to by the return type. If ``limit`` is provided, this value will be less than
-+or equal to ``limit``.
-+
-+The ``indicator_ptr`` argument is a type hint for the type to return. It must
-+be a pointer to a ``const`` type, and ``Byte`` must an integral or enumeration
-+type with an alignment and size of ``1`` (e.g. ``char``, ``unsigned char``,
-+``std::byte``, etc.). A future extension can possibly allow for additional
-+types, possibly all types which are considered "trivial" types (but without
-+pointers inside).
-+
-+The ``resource_name_...`` arguments describe a plain, wide, or ``char8_t``
-+range as as string. ``Char`` can be one of ``char``, ``wchar_t``, or
-+``char8_t`` to represent a string in the literal encoding, wide literal
-+encoding, or UTF-8 encoding respectively. While they have these stated
-+encodings, the plain, wide (when ``sizeof(wchar_t) == 1``), and ``char8_t``
-+strings are passed as-is to internal file handling solutions. ``wchar_t``
-+string ranges where it is 16-bits wide or 32-bits wide assume it is encoded as
-+UTF-16 or UTF-32, respectively, and attempt to transcode to UTF-8. This means
-+some files may not be representable when using wide strings. This behavior is
-+subject to change, for example if the ``-fexec-charset=Encoding-Name`` or
-+``-fwide-exec-charset=Encoding-Name`` options are implemented. It is also
-+subject to change based on other factors, such as whether it is advantageous
-+to produce a hard error on failed conversion or try the search anyway using
-+canonical replacement characters (such as ``'\u{FFFD}'`` or ``'?'``).
-+
-+The seventh argument is the offset in bytes into the file. It can be set to
-+``0`` to have no effect. This represents the number of ``Byte`` objects
-+that will be discarded from the start of the file stream.
-+
-+The ``limit`` argument is optional, and represents a fixed upper limit on the count
-+of ``Byte`` objects that the returned value will point to. Less values can be
-+pointed to by the return value than what ``limit`` describes.
-+
-+The ``offset`` value is applied before any ``limit`` is taken into
-+consideration. Both values can make a file that has binary data be considered
-+empty. The file name represented by the string range is searched in the
-+same way as ``#embed`` files, with the caveat that any file not blessed by
-+``#depend`` will be treated as a file that is not found. All searches done are
-+searches as-if done by a quoted header name for a ``#embed`` directive.
-+
-+The data returned may not be unique, may prefix into other data, and has no
-+guarantee that caching may apply. That is, calling ``__builtin_std_embed`` with
-+the exact same arguments twice may return two different pointers or the same
-+pointer, and is subject to everything from optimization level, implementation
-+effort, and whether or not it is sunny outside right now. Block devices such
-+as ``/dev/urandom`` can possibly be supported in the future.
-+
- 
- Alignment builtins
- ------------------
-diff --git a/clang/docs/ReleaseNotes.rst b/clang/docs/ReleaseNotes.rst
-index 69687db1bbed..64fc10235d28 100644
---- a/clang/docs/ReleaseNotes.rst
-+++ b/clang/docs/ReleaseNotes.rst
-@@ -193,6 +193,9 @@ C++ Language Changes
- - ``__is_trivially_equality_comparable`` no longer returns false for all enum types. (#GH132672)
- - ``auto`` parameters are now available in all C++ language modes as an extension.
- 
-+C++2d Feature Support
-+^^^^^^^^^^^^^^^^^^^^^
-+
- C++2c Feature Support
- ^^^^^^^^^^^^^^^^^^^^^
- 
-diff --git a/clang/docs/ReleaseNotesTemplate.txt b/clang/docs/ReleaseNotesTemplate.txt
-index b5664dcf3b21..0c588c3b4f43 100644
---- a/clang/docs/ReleaseNotesTemplate.txt
-+++ b/clang/docs/ReleaseNotesTemplate.txt
-@@ -61,6 +61,9 @@ What's New in Clang |release|?
- C++ Language Changes
- --------------------
- 
-+C++2d Feature Support
-+^^^^^^^^^^^^^^^^^^^^^
-+
- C++2c Feature Support
- ^^^^^^^^^^^^^^^^^^^^^
- 
 diff --git a/clang/include/clang/AST/ASTContext.h b/clang/include/clang/AST/ASTContext.h
-index a4ed852d3644..8e72b4ad196f 100644
+index 7ed6509c3..5a3529422 100644
 --- a/clang/include/clang/AST/ASTContext.h
 +++ b/clang/include/clang/AST/ASTContext.h
 @@ -27,6 +27,7 @@
@@ -386,7 +202,7 @@ index a4ed852d3644..8e72b4ad196f 100644
  class ProfileList;
  class StoredDeclsMap;
  class TargetAttr;
-@@ -565,6 +567,10 @@ class ASTContext : public RefCountedBase<ASTContext> {
+@@ -571,6 +573,10 @@ class ASTContext : public RefCountedBase<ASTContext> {
    // A mapping from Scalable Vector Type keys to their corresponding QualType.
    mutable llvm::DenseMap<llvm::ScalableVecTyKey, QualType> ScalableVecTyMap;
  
@@ -397,7 +213,7 @@ index a4ed852d3644..8e72b4ad196f 100644
    ASTContext &this_() { return *this; }
  
  public:
-@@ -806,6 +812,8 @@ public:
+@@ -812,6 +818,8 @@ public:
    mutable DeclarationNameTable DeclarationNames;
    IntrusiveRefCntPtr<ExternalASTSource> ExternalSource;
    ASTMutationListener *Listener = nullptr;
@@ -406,7 +222,7 @@ index a4ed852d3644..8e72b4ad196f 100644
  
    /// Returns the clang bytecode interpreter context.
    interp::Context &getInterpContext() const;
-@@ -1423,6 +1431,13 @@ public:
+@@ -1434,6 +1442,13 @@ public:
    ASTContext &operator=(const ASTContext &) = delete;
    ~ASTContext();
  
@@ -421,10 +237,10 @@ index a4ed852d3644..8e72b4ad196f 100644
    ///
    /// The external AST source provides the ability to load parts of
 diff --git a/clang/include/clang/AST/DeclCXX.h b/clang/include/clang/AST/DeclCXX.h
-index 28d171253dc0..55bb4048ee68 100644
+index 45fb99e27..d802d115c 100644
 --- a/clang/include/clang/AST/DeclCXX.h
 +++ b/clang/include/clang/AST/DeclCXX.h
-@@ -4466,8 +4466,8 @@ public:
+@@ -4474,8 +4474,8 @@ public:
  /// uniquified by value within a translation unit.
  ///
  /// These is currently only used to back the LValue returned by
@@ -436,10 +252,10 @@ index 28d171253dc0..55bb4048ee68 100644
                                    public Mergeable<UnnamedGlobalConstantDecl>,
                                    public llvm::FoldingSetNode {
 diff --git a/clang/include/clang/AST/Expr.h b/clang/include/clang/AST/Expr.h
-index 7c94c4d35641..048730cda990 100644
+index 53107e279..15f4da8ff 100644
 --- a/clang/include/clang/AST/Expr.h
 +++ b/clang/include/clang/AST/Expr.h
-@@ -5019,23 +5019,27 @@ enum class SourceLocIdentKind {
+@@ -5028,23 +5028,27 @@ enum class SourceLocIdentKind {
  
  /// Represents a function call to one of __builtin_LINE(), __builtin_COLUMN(),
  /// __builtin_FUNCTION(), __builtin_FUNCSIG(), __builtin_FILE(),
@@ -471,7 +287,7 @@ index 7c94c4d35641..048730cda990 100644
  
    /// Return a string representing the name of the specific builtin function.
    StringRef getBuiltinStr() const;
-@@ -5064,6 +5068,9 @@ public:
+@@ -5073,6 +5077,9 @@ public:
    const DeclContext *getParentContext() const { return ParentContext; }
    DeclContext *getParentContext() { return ParentContext; }
  
@@ -482,7 +298,7 @@ index 7c94c4d35641..048730cda990 100644
    SourceLocation getBeginLoc() const { return BuiltinLoc; }
    SourceLocation getEndLoc() const { return RParenLoc; }
 diff --git a/clang/include/clang/Basic/Builtins.td b/clang/include/clang/Basic/Builtins.td
-index 63cdb787bea1..ce0c493f8fd2 100644
+index 344a712dd..5455d6fab 100644
 --- a/clang/include/clang/Basic/Builtins.td
 +++ b/clang/include/clang/Basic/Builtins.td
 @@ -1219,6 +1219,13 @@ def GetVtablePointer : LangBuiltin<"CXX_LANG"> {
@@ -500,22 +316,10 @@ index 63cdb787bea1..ce0c493f8fd2 100644
  def EHReturn : Builtin {
    let Spellings = ["__builtin_eh_return"];
 diff --git a/clang/include/clang/Basic/DiagnosticGroups.td b/clang/include/clang/Basic/DiagnosticGroups.td
-index 244cd3630bb1..c0f81bfb5630 100644
+index 79583534b..0abff4207 100644
 --- a/clang/include/clang/Basic/DiagnosticGroups.td
 +++ b/clang/include/clang/Basic/DiagnosticGroups.td
-@@ -410,8 +410,9 @@ def CXXPre23CompatPedantic :
- def CXXPre26Compat : DiagGroup<"pre-c++26-compat">;
- def CXXPre26CompatPedantic :
-   DiagGroup<"pre-c++26-compat-pedantic", [CXXPre26Compat]>;
--def : DiagGroup<"pre-c++2c-compat", [CXXPre26Compat]>;
--def : DiagGroup<"pre-c++2c-compat-pedantic", [CXXPre26CompatPedantic]>;
-+def CXXPre29Compat : DiagGroup<"pre-c++2d-compat">;
-+def CXXPre29CompatPedantic :
-+  DiagGroup<"pre-c++2d-compat-pedantic", [CXXPre29Compat]>;
- 
- def CXX98CompatBindToTemporaryCopy :
-   DiagGroup<"c++98-compat-bind-to-temporary-copy">;
-@@ -528,6 +529,8 @@ def CXX23Compat : DiagGroup<"c++23-compat", [CXXPre26Compat]>;
+@@ -531,6 +531,8 @@ def CXX23Compat : DiagGroup<"c++23-compat", [CXXPre26Compat]>;
  
  def CXX26Compat : DiagGroup<"c++2c-compat", [DeleteIncomplete]>;
  
@@ -524,39 +328,20 @@ index 244cd3630bb1..c0f81bfb5630 100644
  def ExitTimeDestructors : DiagGroup<"exit-time-destructors">;
  def FlexibleArrayExtensions : DiagGroup<"flexible-array-extensions">;
  def FourByteMultiChar : DiagGroup<"four-char-constants">;
-@@ -1572,12 +1575,17 @@ def CXX23 : DiagGroup<"c++23-extensions", [CXX23AttrsOnLambda]>;
- // earlier C++ versions.
- def CXX26 : DiagGroup<"c++26-extensions">;
- 
-+// A warning group for warnings about using C++29 features as extensions in
-+// earlier C++ versions.
-+def CXX29 : DiagGroup<"c++29-extensions">;
-+
- def : DiagGroup<"c++0x-extensions", [CXX11]>;
- def : DiagGroup<"c++1y-extensions", [CXX14]>;
- def : DiagGroup<"c++1z-extensions", [CXX17]>;
- def : DiagGroup<"c++2a-extensions", [CXX20]>;
- def : DiagGroup<"c++2b-extensions", [CXX23]>;
--def : DiagGroup<"c++2c-extensions", [CXX26]>;
-+def CXX2C : DiagGroup<"c++2c-extensions", [CXX26]>;
-+def CXX2D : DiagGroup<"c++2d-extensions", [CXX29]>;
- 
- def DelegatingCtorCycles :
-   DiagGroup<"delegating-ctor-cycles">;
 diff --git a/clang/include/clang/Basic/DiagnosticLexKinds.td b/clang/include/clang/Basic/DiagnosticLexKinds.td
-index 383bf1a7fdb3..2fd3f3822664 100644
+index 79e74a846..9f4992774 100644
 --- a/clang/include/clang/Basic/DiagnosticLexKinds.td
 +++ b/clang/include/clang/Basic/DiagnosticLexKinds.td
-@@ -475,6 +475,8 @@ def warn_c23_compat_warning_directive : Warning<
+@@ -479,6 +479,8 @@ def warn_c23_compat_warning_directive : Warning<
  def ext_pp_embed_directive : ExtWarn<
    "#embed is a %select{C23|Clang}0 extension">,
    InGroup<C23>;
 +def ext_pp_depend_directive : ExtWarn<
-+  "#depend is a C++2d extension">, InGroup<CXX2D>;
++  "#depend is a C++2d extension">, InGroup<CXX29>;
  def warn_compat_pp_embed_directive : Warning<
    "#embed is incompatible with C standards before C23">,
    InGroup<CPre23Compat>, DefaultIgnore;
-@@ -590,6 +592,7 @@ def err_pp_including_mainfile_in_preamble : Error<
+@@ -594,6 +596,7 @@ def err_pp_including_mainfile_in_preamble : Error<
  def err_pp_empty_filename : Error<"empty filename">;
  def err_pp_include_too_deep : Error<"#include nested too deeply">;
  def err_pp_expects_filename : Error<"expected \"FILENAME\" or <FILENAME>">;
@@ -565,10 +350,10 @@ index 383bf1a7fdb3..2fd3f3822664 100644
  def err_pp_missing_macro_name : Error<"macro name missing">;
  def err_pp_missing_rparen_in_macro_def : Error<
 diff --git a/clang/include/clang/Basic/DiagnosticSemaKinds.td b/clang/include/clang/Basic/DiagnosticSemaKinds.td
-index f7fba8df1e4d..227849690a64 100644
+index 2cb79b6ba..ed8cb6637 100644
 --- a/clang/include/clang/Basic/DiagnosticSemaKinds.td
 +++ b/clang/include/clang/Basic/DiagnosticSemaKinds.td
-@@ -852,6 +852,11 @@ def err_builtin_definition : Error<"definition of builtin function %0">;
+@@ -858,6 +858,11 @@ def err_builtin_definition : Error<"definition of builtin function %0">;
  def err_builtin_redeclare : Error<"cannot redeclare builtin function %0">;
  def err_invalid_builtin_argument : Error<"invalid argument '%0' to %1">;
  
@@ -580,7 +365,7 @@ index f7fba8df1e4d..227849690a64 100644
  def err_arm_invalid_specialreg : Error<"invalid special register for builtin">;
  def err_arm_invalid_coproc : Error<"coprocessor %0 must be configured as "
    "%select{GCP|CDE}1">;
-@@ -13621,7 +13626,7 @@ def err_riscv_attribute_interrupt_invalid_combination : Error<
+@@ -13685,7 +13690,7 @@ def err_riscv_attribute_interrupt_invalid_combination : Error<
  def err_riscv_builtin_invalid_twiden : Error<"RISC-V XSfmm twiden must be 1, 2 or 4">;
  
  def err_std_source_location_impl_not_found : Error<
@@ -591,7 +376,7 @@ index f7fba8df1e4d..227849690a64 100644
  
 diff --git a/clang/include/clang/Basic/InputDependencyCollection.h b/clang/include/clang/Basic/InputDependencyCollection.h
 new file mode 100644
-index 000000000000..8ca46f8d78a9
+index 000000000..8ca46f8d7
 --- /dev/null
 +++ b/clang/include/clang/Basic/InputDependencyCollection.h
 @@ -0,0 +1,72 @@
@@ -667,106 +452,9 @@ index 000000000000..8ca46f8d78a9
 +} // namespace clang
 +
 +#endif
-diff --git a/clang/include/clang/Basic/LangOptions.def b/clang/include/clang/Basic/LangOptions.def
-index 319fd18cddb3..9755074fd383 100644
---- a/clang/include/clang/Basic/LangOptions.def
-+++ b/clang/include/clang/Basic/LangOptions.def
-@@ -57,6 +57,7 @@ LANGOPT(CPlusPlus17       , 1, 0, NotCompatible, "C++17")
- LANGOPT(CPlusPlus20       , 1, 0, NotCompatible, "C++20")
- LANGOPT(CPlusPlus23       , 1, 0, NotCompatible, "C++23")
- LANGOPT(CPlusPlus26       , 1, 0, NotCompatible, "C++26")
-+LANGOPT(CPlusPlus29       , 1, 0, NotCompatible, "C++29")
- LANGOPT(ObjC              , 1, 0, NotCompatible, "Objective-C")
- LANGOPT(ObjCDefaultSynthProperties , 1, 0, Benign,
-         "Objective-C auto-synthesized properties")
-diff --git a/clang/include/clang/Basic/LangStandard.h b/clang/include/clang/Basic/LangStandard.h
-index 1eef3a633929..7e9cf43bda33 100644
---- a/clang/include/clang/Basic/LangStandard.h
-+++ b/clang/include/clang/Basic/LangStandard.h
-@@ -52,18 +52,19 @@ enum LangFeatures {
-   C17 = (1 << 3),
-   C23 = (1 << 4),
-   C2y = (1 << 5),
--  CPlusPlus = (1 << 6),
--  CPlusPlus11 = (1 << 7),
--  CPlusPlus14 = (1 << 8),
--  CPlusPlus17 = (1 << 9),
--  CPlusPlus20 = (1 << 10),
--  CPlusPlus23 = (1 << 11),
--  CPlusPlus26 = (1 << 12),
--  Digraphs = (1 << 13),
--  GNUMode = (1 << 14),
--  HexFloat = (1 << 15),
--  OpenCL = (1 << 16),
--  HLSL = (1 << 17)
-+  CPlusPlus = (1 << 8),
-+  CPlusPlus11 = (1 << 9),
-+  CPlusPlus14 = (1 << 10),
-+  CPlusPlus17 = (1 << 11),
-+  CPlusPlus20 = (1 << 12),
-+  CPlusPlus23 = (1 << 13),
-+  CPlusPlus26 = (1 << 14),
-+  CPlusPlus29 = (1 << 15),
-+  Digraphs = (1 << 20),
-+  GNUMode = (1 << 21),
-+  HexFloat = (1 << 22),
-+  OpenCL = (1 << 23),
-+  HLSL = (1 << 24)
- };
- 
- /// LangStandard - Information about the properties of a particular language
-@@ -133,6 +134,9 @@ public:
-   /// isCPlusPlus26 - Language is a post-C++26 variant (or later).
-   bool isCPlusPlus26() const { return Flags & CPlusPlus26; }
- 
-+  /// isCPlusPlus2c - Language is a C++2c (expected 2029) variant (or later).
-+  bool isCPlusPlus29() const { return Flags & CPlusPlus29; }
-+
-   /// hasDigraphs - Language supports digraphs.
-   bool hasDigraphs() const { return Flags & Digraphs; }
- 
-diff --git a/clang/include/clang/Basic/LangStandards.def b/clang/include/clang/Basic/LangStandards.def
-index 809240978d01..58c00a840418 100644
---- a/clang/include/clang/Basic/LangStandards.def
-+++ b/clang/include/clang/Basic/LangStandards.def
-@@ -180,17 +180,30 @@ LANGSTANDARD_ALIAS_DEPR(gnucxx23, "gnu++2b")
- 
- // FIXME: Use correct version code for C++26 once published.
- LANGSTANDARD(cxx26, "c++2c",
--             CXX, "Working draft for C++2c",
-+             CXX, "Working draft for C++26",
-              LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
--             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat, 202400)
-+             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat, 202606)
- LANGSTANDARD_ALIAS(cxx26, "c++26")
- 
- LANGSTANDARD(gnucxx26, "gnu++2c",
--             CXX, "Working draft for C++2c with GNU extensions",
-+             CXX, "Working draft for C++26 with GNU extensions",
-              LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
--             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat | GNUMode, 202400)
-+             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | Digraphs | HexFloat | GNUMode, 202606)
- LANGSTANDARD_ALIAS(gnucxx26, "gnu++26")
- 
-+// FIXME: Use correct version code for C++29 once published.
-+LANGSTANDARD(cxx29, "c++2d",
-+             CXX, "Working draft for C++2d",
-+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
-+             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | CPlusPlus29 | Digraphs | HexFloat, 202700)
-+LANGSTANDARD_ALIAS(cxx29, "c++29")
-+
-+LANGSTANDARD(gnucxx29, "gnu++2d",
-+             CXX, "Working draft for C++2d with GNU extensions",
-+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
-+             CPlusPlus20 | CPlusPlus23 | CPlusPlus26 | CPlusPlus29 | Digraphs | HexFloat | GNUMode, 202700)
-+LANGSTANDARD_ALIAS(gnucxx29, "gnu++29")
-+
- // OpenCL
- LANGSTANDARD(opencl10, "cl1.0",
-              OpenCL, "OpenCL 1.0",
 diff --git a/clang/include/clang/Basic/ResourceSearch.h b/clang/include/clang/Basic/ResourceSearch.h
 new file mode 100644
-index 000000000000..094bd2bafb9b
+index 000000000..094bd2baf
 --- /dev/null
 +++ b/clang/include/clang/Basic/ResourceSearch.h
 @@ -0,0 +1,37 @@
@@ -808,7 +496,7 @@ index 000000000000..094bd2bafb9b
 +
 +#endif
 diff --git a/clang/include/clang/Basic/TokenKinds.def b/clang/include/clang/Basic/TokenKinds.def
-index f07d8ebb7503..c382522efdf2 100644
+index f07d8ebb7..c382522ef 100644
 --- a/clang/include/clang/Basic/TokenKinds.def
 +++ b/clang/include/clang/Basic/TokenKinds.def
 @@ -132,6 +132,8 @@ PPKEYWORD(pragma)
@@ -829,7 +517,7 @@ index f07d8ebb7503..c382522efdf2 100644
  // __builtin_types_compatible_p is a GNU C extension that we handle like a C++
  // type trait.
 diff --git a/clang/include/clang/Lex/PPCallbacks.h b/clang/include/clang/Lex/PPCallbacks.h
-index 2f62fa8d52b1..df0798391d49 100644
+index 2f62fa8d5..df0798391 100644
 --- a/clang/include/clang/Lex/PPCallbacks.h
 +++ b/clang/include/clang/Lex/PPCallbacks.h
 @@ -29,6 +29,7 @@ class MacroDefinition;
@@ -872,7 +560,7 @@ index 2f62fa8d52b1..df0798391d49 100644
                          bool ForPragma) override {
      First->EnteredSubmodule(M, ImportLoc, ForPragma);
 diff --git a/clang/include/clang/Lex/Preprocessor.h b/clang/include/clang/Lex/Preprocessor.h
-index 8b684e85eb1c..e373c953e8a3 100644
+index 413e80e76..56c2eb76c 100644
 --- a/clang/include/clang/Lex/Preprocessor.h
 +++ b/clang/include/clang/Lex/Preprocessor.h
 @@ -17,6 +17,7 @@
@@ -883,7 +571,7 @@ index 8b684e85eb1c..e373c953e8a3 100644
  #include "clang/Basic/LLVM.h"
  #include "clang/Basic/LangOptions.h"
  #include "clang/Basic/Module.h"
-@@ -343,6 +344,10 @@ public:
+@@ -345,6 +346,10 @@ public:
    /// The kind of translation unit we are processing.
    const TranslationUnitKind TUKind;
  
@@ -894,7 +582,7 @@ index 8b684e85eb1c..e373c953e8a3 100644
    /// Returns a pointer into the given file's buffer that's guaranteed
    /// to be between tokens. The returned pointer is always before \p Start.
    /// The maximum distance betweenthe returned pointer and \p Start is
-@@ -1793,6 +1798,10 @@ public:
+@@ -1796,6 +1801,10 @@ public:
    /// Lex a token, forming a header-name token if possible.
    bool LexHeaderName(Token &Result, bool AllowMacroExpansion = true);
  
@@ -905,7 +593,7 @@ index 8b684e85eb1c..e373c953e8a3 100644
    /// Lex the parameters for an #embed directive, returns nullopt on error.
    std::optional<LexEmbedParametersResult> LexEmbedParameters(Token &Current,
                                                               bool ForHasEmbed);
-@@ -2875,6 +2884,8 @@ private:
+@@ -2874,6 +2883,8 @@ private:
        const FileEntry *LookupFromFile, StringRef &LookupFilename,
        SmallVectorImpl<char> &RelativePath, SmallVectorImpl<char> &SearchPath,
        ModuleMap::KnownHeader &SuggestedModule, bool isAngled);
@@ -915,10 +603,10 @@ index 8b684e85eb1c..e373c953e8a3 100644
    void HandleEmbedDirective(SourceLocation HashLoc, Token &Tok);
    void HandleEmbedDirectiveImpl(SourceLocation HashLoc,
 diff --git a/clang/include/clang/Parse/Parser.h b/clang/include/clang/Parse/Parser.h
-index 5e7af97feeb6..059edafc6ec6 100644
+index 892715a6d..f32f84094 100644
 --- a/clang/include/clang/Parse/Parser.h
 +++ b/clang/include/clang/Parse/Parser.h
-@@ -3897,6 +3897,7 @@ private:
+@@ -3889,6 +3889,7 @@ private:
    bool isRevertibleTypeTrait(const IdentifierInfo *Id,
                               clang::tok::TokenKind *Kind = nullptr);
  
@@ -926,7 +614,7 @@ index 5e7af97feeb6..059edafc6ec6 100644
    /// Parse a cast-expression, or, if \pisUnaryExpression is true, parse
    /// a unary-expression.
    ///
-@@ -3967,6 +3968,7 @@ private:
+@@ -3959,6 +3960,7 @@ private:
    /// [GNU]   '__builtin_LINE' '(' ')'
    /// [CLANG] '__builtin_COLUMN' '(' ')'
    /// [GNU]   '__builtin_source_location' '(' ')'
@@ -934,7 +622,7 @@ index 5e7af97feeb6..059edafc6ec6 100644
    /// [GNU]   '__builtin_types_compatible_p' '(' type-name ',' type-name ')'
    /// [GNU]   '__null'
    /// [OBJC]  '[' objc-message-expr ']'
-@@ -4149,6 +4151,7 @@ private:
+@@ -4141,6 +4143,7 @@ private:
    /// \endverbatim
    ExprResult ParseUnaryExprOrTypeTraitExpression();
  
@@ -942,7 +630,7 @@ index 5e7af97feeb6..059edafc6ec6 100644
    /// ParseBuiltinPrimaryExpression
    ///
    /// \verbatim
-@@ -4165,6 +4168,7 @@ private:
+@@ -4157,6 +4160,7 @@ private:
    /// [GNU]   '__builtin_LINE' '(' ')'
    /// [CLANG] '__builtin_COLUMN' '(' ')'
    /// [GNU]   '__builtin_source_location' '(' ')'
@@ -950,7 +638,7 @@ index 5e7af97feeb6..059edafc6ec6 100644
    /// [OCL]   '__builtin_astype' '(' assignment-expression ',' type-name ')'
    ///
    /// [GNU] offsetof-member-designator:
-@@ -4172,6 +4176,7 @@ private:
+@@ -4164,6 +4168,7 @@ private:
    /// [GNU]   offsetof-member-designator '.' identifier
    /// [GNU]   offsetof-member-designator '[' expression ']'
    /// \endverbatim
@@ -959,10 +647,10 @@ index 5e7af97feeb6..059edafc6ec6 100644
  
    /// Parse a __builtin_sycl_unique_stable_name expression.  Accepts a type-id
 diff --git a/clang/include/clang/Sema/Sema.h b/clang/include/clang/Sema/Sema.h
-index b8d760e7e097..c0570d2dc83e 100644
+index 6e6ca1c4a..a383ac809 100644
 --- a/clang/include/clang/Sema/Sema.h
 +++ b/clang/include/clang/Sema/Sema.h
-@@ -3053,6 +3053,7 @@ private:
+@@ -3059,6 +3059,7 @@ private:
    bool CheckInvalidBuiltinCountedByRef(const Expr *E,
                                         BuiltinCountedByRefKind K);
    bool BuiltinCountedByRef(CallExpr *TheCall);
@@ -970,7 +658,7 @@ index b8d760e7e097..c0570d2dc83e 100644
  
    // Matrix builtin handling.
    ExprResult BuiltinMatrixTranspose(CallExpr *TheCall, ExprResult CallResult);
-@@ -7672,10 +7673,11 @@ public:
+@@ -7668,10 +7669,11 @@ public:
                              TypeSourceInfo *TInfo, SourceLocation RPLoc);
  
    // __builtin_LINE(), __builtin_FUNCTION(), __builtin_FUNCSIG(),
@@ -985,7 +673,7 @@ index b8d760e7e097..c0570d2dc83e 100644
  
    // #embed
    ExprResult ActOnEmbedExpr(SourceLocation EmbedKeywordLoc,
-@@ -7684,7 +7686,8 @@ public:
+@@ -7680,7 +7682,8 @@ public:
    // Build a potentially resolved SourceLocExpr.
    ExprResult BuildSourceLocExpr(SourceLocIdentKind Kind, QualType ResultTy,
                                  SourceLocation BuiltinLoc, SourceLocation RPLoc,
@@ -996,7 +684,7 @@ index b8d760e7e097..c0570d2dc83e 100644
    // __null
    ExprResult ActOnGNUNullExpr(SourceLocation TokenLoc);
 diff --git a/clang/lib/AST/ASTContext.cpp b/clang/lib/AST/ASTContext.cpp
-index abf0cd5e18c2..62b4b65dc51b 100644
+index 222881154..3e8dadf8b 100644
 --- a/clang/lib/AST/ASTContext.cpp
 +++ b/clang/lib/AST/ASTContext.cpp
 @@ -953,6 +953,20 @@ ASTContext::ASTContext(LangOptions &LOpts, SourceManager &SM,
@@ -1021,10 +709,10 @@ index abf0cd5e18c2..62b4b65dc51b 100644
    // Release the DenseMaps associated with DeclContext objects.
    // FIXME: Is this the ideal solution?
 diff --git a/clang/lib/AST/ASTImporter.cpp b/clang/lib/AST/ASTImporter.cpp
-index 567d2d07298a..73437bef46a8 100644
+index d743717ad..07352a518 100644
 --- a/clang/lib/AST/ASTImporter.cpp
 +++ b/clang/lib/AST/ASTImporter.cpp
-@@ -7628,6 +7628,7 @@ ExpectedStmt ASTNodeImporter::VisitSourceLocExpr(SourceLocExpr *E) {
+@@ -7748,6 +7748,7 @@ ExpectedStmt ASTNodeImporter::VisitSourceLocExpr(SourceLocExpr *E) {
    auto ToType = importChecked(Err, E->getType());
    auto BLoc = importChecked(Err, E->getBeginLoc());
    auto RParenLoc = importChecked(Err, E->getEndLoc());
@@ -1032,7 +720,7 @@ index 567d2d07298a..73437bef46a8 100644
    if (Err)
      return std::move(Err);
    auto ParentContextOrErr = Importer.ImportContext(E->getParentContext());
-@@ -7636,7 +7637,7 @@ ExpectedStmt ASTNodeImporter::VisitSourceLocExpr(SourceLocExpr *E) {
+@@ -7756,7 +7757,7 @@ ExpectedStmt ASTNodeImporter::VisitSourceLocExpr(SourceLocExpr *E) {
  
    return new (Importer.getToContext())
        SourceLocExpr(Importer.getToContext(), E->getIdentKind(), ToType, BLoc,
@@ -1042,10 +730,10 @@ index 567d2d07298a..73437bef46a8 100644
  
  ExpectedStmt ASTNodeImporter::VisitVAArgExpr(VAArgExpr *E) {
 diff --git a/clang/lib/AST/ByteCode/Compiler.cpp b/clang/lib/AST/ByteCode/Compiler.cpp
-index 9444eeb0c2ad..f4c91c180325 100644
+index 869d3a876..ba7a94cd0 100644
 --- a/clang/lib/AST/ByteCode/Compiler.cpp
 +++ b/clang/lib/AST/ByteCode/Compiler.cpp
-@@ -3735,7 +3735,7 @@ bool Compiler<Emitter>::VisitSourceLocExpr(const SourceLocExpr *E) {
+@@ -3988,7 +3988,7 @@ bool Compiler<Emitter>::VisitSourceLocExpr(const SourceLocExpr *E) {
      return this->visit(LValueExpr);
  
    // Otherwise, we have a decl (which is the case for
@@ -1055,7 +743,7 @@ index 9444eeb0c2ad..f4c91c180325 100644
    assert(Val.getLValuePath().size() == 0);
    const auto *BaseDecl = Base.dyn_cast<const ValueDecl *>();
 diff --git a/clang/lib/AST/Expr.cpp b/clang/lib/AST/Expr.cpp
-index 1bafc4708a30..d6253c2eff29 100644
+index 0bb9c6aa0..9ad5f3c44 100644
 --- a/clang/lib/AST/Expr.cpp
 +++ b/clang/lib/AST/Expr.cpp
 @@ -2256,9 +2256,11 @@ bool BinaryOperator::isNullPointerArithmeticExtension(ASTContext &Ctx,
@@ -1102,7 +790,7 @@ index 1bafc4708a30..d6253c2eff29 100644
    // If we are currently parsing a lambda declarator, we might not have a fully
    // formed call operator declaration yet, and we could not form a function name
 diff --git a/clang/lib/AST/ExprConstant.cpp b/clang/lib/AST/ExprConstant.cpp
-index f7d63d91737c..d3a9021f9733 100644
+index 25a96a9c3..7ea69a005 100644
 --- a/clang/lib/AST/ExprConstant.cpp
 +++ b/clang/lib/AST/ExprConstant.cpp
 @@ -53,13 +53,18 @@
@@ -1154,7 +842,7 @@ index f7d63d91737c..d3a9021f9733 100644
    if (Index < S->getLength())
      Value = S->getCodeUnit(Index);
    return Value;
-@@ -9971,8 +9981,36 @@ public:
+@@ -10018,8 +10028,36 @@ public:
  
    bool VisitSourceLocExpr(const SourceLocExpr *E) {
      assert(!E->isIntType() && "SourceLocExpr isn't a pointer type?");
@@ -1192,7 +880,7 @@ index f7d63d91737c..d3a9021f9733 100644
      Result.setFrom(Info.Ctx, LValResult);
      return true;
    }
-@@ -10707,7 +10745,324 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
+@@ -10804,7 +10842,324 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
          return false;
      }
    }
@@ -1517,7 +1205,7 @@ index f7d63d91737c..d3a9021f9733 100644
    default:
      return false;
    }
-@@ -15456,7 +15811,8 @@ public:
+@@ -15754,7 +16109,8 @@ public:
    bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
      assert(E->getType()->isIntegralOrEnumerationType() &&
             "Invalid evaluation result.");
@@ -1528,10 +1216,10 @@ index f7d63d91737c..d3a9021f9733 100644
      assert(SI.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
             "Invalid evaluation result.");
 diff --git a/clang/lib/AST/StmtPrinter.cpp b/clang/lib/AST/StmtPrinter.cpp
-index 6c3294573e9d..344f41bb25dc 100644
+index 9a97d52fd..473257d6e 100644
 --- a/clang/lib/AST/StmtPrinter.cpp
 +++ b/clang/lib/AST/StmtPrinter.cpp
-@@ -1305,7 +1305,14 @@ void StmtPrinter::VisitOpenACCCacheConstruct(OpenACCCacheConstruct *S) {
+@@ -1337,7 +1337,14 @@ void StmtPrinter::VisitOpenACCCacheConstruct(OpenACCCacheConstruct *S) {
  //===----------------------------------------------------------------------===//
  
  void StmtPrinter::VisitSourceLocExpr(SourceLocExpr *Node) {
@@ -1548,10 +1236,10 @@ index 6c3294573e9d..344f41bb25dc 100644
  
  void StmtPrinter::VisitEmbedExpr(EmbedExpr *Node) {
 diff --git a/clang/lib/Basic/CMakeLists.txt b/clang/lib/Basic/CMakeLists.txt
-index 350c77696bcc..085c0a65fa10 100644
+index 21851e79b..bdf84fb86 100644
 --- a/clang/lib/Basic/CMakeLists.txt
 +++ b/clang/lib/Basic/CMakeLists.txt
-@@ -70,6 +70,7 @@ add_clang_library(clangBasic
+@@ -71,6 +71,7 @@ add_clang_library(clangBasic
    FileEntry.cpp
    FileManager.cpp
    IdentifierTable.cpp
@@ -1559,7 +1247,7 @@ index 350c77696bcc..085c0a65fa10 100644
    LangOptions.cpp
    LangStandards.cpp
    MakeSupport.cpp
-@@ -82,6 +83,7 @@ add_clang_library(clangBasic
+@@ -83,6 +84,7 @@ add_clang_library(clangBasic
    ParsedAttrInfo.cpp
    ProfileList.cpp
    NoSanitizeList.cpp
@@ -1568,10 +1256,10 @@ index 350c77696bcc..085c0a65fa10 100644
    Sanitizers.cpp
    Sarif.cpp
 diff --git a/clang/lib/Basic/IdentifierTable.cpp b/clang/lib/Basic/IdentifierTable.cpp
-index a2e9316e4e37..5eac925fb5e6 100644
+index 68cd02a62..3481cf502 100644
 --- a/clang/lib/Basic/IdentifierTable.cpp
 +++ b/clang/lib/Basic/IdentifierTable.cpp
-@@ -442,6 +442,7 @@ tok::PPKeywordKind IdentifierInfo::getPPKeywordID() const {
+@@ -439,6 +439,7 @@ tok::PPKeywordKind IdentifierInfo::getPPKeywordID() const {
  
    CASE( 6, 'a', 's', assert);
    CASE( 6, 'd', 'f', define);
@@ -1581,7 +1269,7 @@ index a2e9316e4e37..5eac925fb5e6 100644
    CASE( 6, 'm', 'd', module);
 diff --git a/clang/lib/Basic/InputDependencyCollection.cpp b/clang/lib/Basic/InputDependencyCollection.cpp
 new file mode 100644
-index 000000000000..c60915b6e2ec
+index 000000000..c60915b6e
 --- /dev/null
 +++ b/clang/lib/Basic/InputDependencyCollection.cpp
 @@ -0,0 +1,241 @@
@@ -1826,21 +1514,9 @@ index 000000000000..c60915b6e2ec
 +}
 +
 +} // namespace clang
-diff --git a/clang/lib/Basic/LangOptions.cpp b/clang/lib/Basic/LangOptions.cpp
-index 91bf49361de1..b557eb29e6b7 100644
---- a/clang/lib/Basic/LangOptions.cpp
-+++ b/clang/lib/Basic/LangOptions.cpp
-@@ -124,6 +124,7 @@ void LangOptions::setLangDefaults(LangOptions &Opts, Language Lang,
-   Opts.CPlusPlus20 = Std.isCPlusPlus20();
-   Opts.CPlusPlus23 = Std.isCPlusPlus23();
-   Opts.CPlusPlus26 = Std.isCPlusPlus26();
-+  Opts.CPlusPlus29 = Std.isCPlusPlus29();
-   Opts.GNUMode = Std.isGNUMode();
-   Opts.GNUCVersion = 0;
-   Opts.HexFloats = Std.hasHexFloats();
 diff --git a/clang/lib/Basic/ResourceSearch.cpp b/clang/lib/Basic/ResourceSearch.cpp
 new file mode 100644
-index 000000000000..54ed9d2601e1
+index 000000000..54ed9d260
 --- /dev/null
 +++ b/clang/lib/Basic/ResourceSearch.cpp
 @@ -0,0 +1,112 @@
@@ -1957,7 +1633,7 @@ index 000000000000..54ed9d2601e1
 +}
 +} // namespace clang
 diff --git a/clang/lib/Frontend/ASTUnit.cpp b/clang/lib/Frontend/ASTUnit.cpp
-index 2974cf266018..50489cef2d84 100644
+index 75e4f7772..41beb666e 100644
 --- a/clang/lib/Frontend/ASTUnit.cpp
 +++ b/clang/lib/Frontend/ASTUnit.cpp
 @@ -763,12 +763,13 @@ std::unique_ptr<ASTUnit> ASTUnit::LoadFromASTFile(
@@ -1987,10 +1663,10 @@ index 2974cf266018..50489cef2d84 100644
      AST->Ctx->setPrintingPolicy(PrintingPolicy(*AST->LangOpts));
  
 diff --git a/clang/lib/Frontend/CompilerInstance.cpp b/clang/lib/Frontend/CompilerInstance.cpp
-index 8aee45b5dc64..6daddda4f3c8 100644
+index 941c9e40f..56a9951d0 100644
 --- a/clang/lib/Frontend/CompilerInstance.cpp
 +++ b/clang/lib/Frontend/CompilerInstance.cpp
-@@ -569,6 +569,8 @@ void CompilerInstance::createASTContext() {
+@@ -575,6 +575,8 @@ void CompilerInstance::createASTContext() {
        getLangOpts(), PP.getSourceManager(), PP.getIdentifierTable(),
        PP.getSelectorTable(), PP.getBuiltinInfo(), PP.TUKind);
    Context->InitBuiltinTypes(getTarget(), getAuxTarget());
@@ -2000,7 +1676,7 @@ index 8aee45b5dc64..6daddda4f3c8 100644
  }
  
 diff --git a/clang/lib/Frontend/DependencyFile.cpp b/clang/lib/Frontend/DependencyFile.cpp
-index 00f4a54269cf..68263d0f17f7 100644
+index 00f4a5426..68263d0f1 100644
 --- a/clang/lib/Frontend/DependencyFile.cpp
 +++ b/clang/lib/Frontend/DependencyFile.cpp
 @@ -12,6 +12,7 @@
@@ -2133,7 +1809,7 @@ index 00f4a54269cf..68263d0f17f7 100644
    PP.addPPCallbacks(std::make_unique<DepCollectorPPCallbacks>(*this, PP));
    PP.getHeaderSearchInfo().getModuleMap().addModuleMapCallbacks(
 diff --git a/clang/lib/Lex/PPDirectives.cpp b/clang/lib/Lex/PPDirectives.cpp
-index eb21a510dcf8..b519b8b40bfe 100644
+index 76ea6b6a6..6e1092940 100644
 --- a/clang/lib/Lex/PPDirectives.cpp
 +++ b/clang/lib/Lex/PPDirectives.cpp
 @@ -19,6 +19,7 @@
@@ -2225,7 +1901,7 @@ index eb21a510dcf8..b519b8b40bfe 100644
        case tok::pp_module:
        case tok::pp___preprocessed_module:
        case tok::pp___preprocessed_import:
-@@ -1491,6 +1437,8 @@ void Preprocessor::HandleDirective(Token &Result) {
+@@ -1494,6 +1440,8 @@ void Preprocessor::HandleDirective(Token &Result) {
        return HandleIdentSCCSDirective(Result);
      case tok::pp_embed:
        return HandleEmbedDirective(Introducer.getLocation(), Result);
@@ -2234,7 +1910,7 @@ index eb21a510dcf8..b519b8b40bfe 100644
      case tok::pp_assert:
        //isExtension = true;  // FIXME: implement #assert
        break;
-@@ -4198,6 +4146,54 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
+@@ -4203,6 +4151,54 @@ void Preprocessor::HandleEmbedDirective(SourceLocation HashLoc,
    HandleEmbedDirectiveImpl(HashLoc, *Params, BinaryContents, FilenameToGo);
  }
  
@@ -2290,10 +1966,10 @@ index eb21a510dcf8..b519b8b40bfe 100644
  ///
  /// pp-import:
 diff --git a/clang/lib/Lex/Preprocessor.cpp b/clang/lib/Lex/Preprocessor.cpp
-index 1e21b4a94cea..59f62e9df4fa 100644
+index 1625d5918..c0c5e73a1 100644
 --- a/clang/lib/Lex/Preprocessor.cpp
 +++ b/clang/lib/Lex/Preprocessor.cpp
-@@ -1060,8 +1060,30 @@ void Preprocessor::LexTokensUntilEOF(std::vector<Token> *Tokens) {
+@@ -1063,8 +1063,30 @@ void Preprocessor::LexTokensUntilEOF(std::vector<Token> *Tokens) {
  /// \return \c true if we reached EOD or EOF while looking for a > token in
  ///         a concatenated header name and diagnosed it. \c false otherwise.
  bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
@@ -2324,7 +2000,7 @@ index 1e21b4a94cea..59f62e9df4fa 100644
    if (CurPPLexer) {
      // Avoid nested header-name lexing when macro expansion recurses
      // __has_include(__has_include))
-@@ -1073,6 +1095,16 @@ bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
+@@ -1076,6 +1098,16 @@ bool Preprocessor::LexHeaderName(Token &FilenameTok, bool AllowMacroExpansion) {
      Lex(FilenameTok);
    }
  
@@ -2342,7 +2018,7 @@ index 1e21b4a94cea..59f62e9df4fa 100644
    // case, glue the tokens together into an angle_string_literal token.
    SmallString<128> FilenameBuffer;
 diff --git a/clang/lib/Parse/ParseExpr.cpp b/clang/lib/Parse/ParseExpr.cpp
-index 2987d32d6e0d..4d33a9c1759a 100644
+index 74209f579..804b28e5e 100644
 --- a/clang/lib/Parse/ParseExpr.cpp
 +++ b/clang/lib/Parse/ParseExpr.cpp
 @@ -1097,6 +1097,7 @@ Parser::ParseCastExpression(CastParseKind ParseKind, bool isAddressOfOperand,
@@ -2353,7 +2029,7 @@ index 2987d32d6e0d..4d33a9c1759a 100644
      if (NotPrimaryExpression)
        *NotPrimaryExpression = true;
      // This parses the complete suffix; we can return early.
-@@ -2608,13 +2609,8 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
+@@ -2589,13 +2590,8 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
    case tok::kw___builtin_FUNCTION:
    case tok::kw___builtin_FUNCSIG:
    case tok::kw___builtin_LINE:
@@ -2369,7 +2045,7 @@ index 2987d32d6e0d..4d33a9c1759a 100644
      SourceLocIdentKind Kind = [&] {
        switch (T) {
        case tok::kw___builtin_FILE:
-@@ -2630,12 +2626,31 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
+@@ -2611,12 +2607,31 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
        case tok::kw___builtin_COLUMN:
          return SourceLocIdentKind::Column;
        case tok::kw___builtin_source_location:
@@ -2403,10 +2079,10 @@ index 2987d32d6e0d..4d33a9c1759a 100644
    }
    }
 diff --git a/clang/lib/Sema/SemaChecking.cpp b/clang/lib/Sema/SemaChecking.cpp
-index ec4a9037f5c2..1036b00a146e 100644
+index 2a8395e26..d014d6d4a 100644
 --- a/clang/lib/Sema/SemaChecking.cpp
 +++ b/clang/lib/Sema/SemaChecking.cpp
-@@ -4029,6 +4029,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
+@@ -4103,6 +4103,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
      if (BuiltinCountedByRef(TheCall))
        return ExprError();
      break;
@@ -2420,7 +2096,7 @@ index ec4a9037f5c2..1036b00a146e 100644
    }
  
    if (getLangOpts().HLSL && HLSL().CheckBuiltinFunctionCall(BuiltinID, TheCall))
-@@ -6952,6 +6959,139 @@ bool Sema::BuiltinCountedByRef(CallExpr *TheCall) {
+@@ -7034,6 +7041,139 @@ bool Sema::BuiltinCountedByRef(CallExpr *TheCall) {
    return false;
  }
  
@@ -2561,10 +2237,10 @@ index ec4a9037f5c2..1036b00a146e 100644
  /// It allows leaking and modification of bounds safety information.
  bool Sema::CheckInvalidBuiltinCountedByRef(const Expr *E,
 diff --git a/clang/lib/Sema/SemaExpr.cpp b/clang/lib/Sema/SemaExpr.cpp
-index 675d0bd389e2..c60ed447620d 100644
+index 3afca1a20..0ae9462c5 100644
 --- a/clang/lib/Sema/SemaExpr.cpp
 +++ b/clang/lib/Sema/SemaExpr.cpp
-@@ -5753,8 +5753,9 @@ struct EnsureImmediateInvocationInDefaultArgs
+@@ -5797,8 +5797,9 @@ struct EnsureImmediateInvocationInDefaultArgs
          !SemaRef.CurContext->isDependentContext() || DC->isDependentContext())
        DC = SemaRef.CurContext;
  
@@ -2576,7 +2252,7 @@ index 675d0bd389e2..c60ed447620d 100644
    }
  };
  
-@@ -17467,7 +17468,8 @@ static CXXRecordDecl *LookupStdSourceLocationImpl(Sema &S, SourceLocation Loc) {
+@@ -17548,7 +17549,8 @@ static CXXRecordDecl *LookupStdSourceLocationImpl(Sema &S, SourceLocation Loc) {
  
  ExprResult Sema::ActOnSourceLocExpr(SourceLocIdentKind Kind,
                                      SourceLocation BuiltinLoc,
@@ -2586,7 +2262,7 @@ index 675d0bd389e2..c60ed447620d 100644
    QualType ResultTy;
    switch (Kind) {
    case SourceLocIdentKind::File:
-@@ -17490,20 +17492,34 @@ ExprResult Sema::ActOnSourceLocExpr(SourceLocIdentKind Kind,
+@@ -17571,20 +17573,34 @@ ExprResult Sema::ActOnSourceLocExpr(SourceLocIdentKind Kind,
        if (!StdSourceLocationImplDecl)
          return ExprError();
      }
@@ -2626,10 +2302,10 @@ index 675d0bd389e2..c60ed447620d 100644
  
  ExprResult Sema::ActOnEmbedExpr(SourceLocation EmbedKeywordLoc,
 diff --git a/clang/lib/Sema/TreeTransform.h b/clang/lib/Sema/TreeTransform.h
-index 53107c827006..a39dd6ecb468 100644
+index 1dd7be50c..3f9861f05 100644
 --- a/clang/lib/Sema/TreeTransform.h
 +++ b/clang/lib/Sema/TreeTransform.h
-@@ -3784,9 +3784,10 @@ public:
+@@ -3783,9 +3783,10 @@ public:
    ExprResult RebuildSourceLocExpr(SourceLocIdentKind Kind, QualType ResultTy,
                                    SourceLocation BuiltinLoc,
                                    SourceLocation RPLoc,
@@ -2642,7 +2318,7 @@ index 53107c827006..a39dd6ecb468 100644
    }
  
    ExprResult RebuildConceptSpecializationExpr(NestedNameSpecifierLoc NNS,
-@@ -14512,9 +14513,9 @@ ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
+@@ -14718,9 +14719,9 @@ ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
    if (!getDerived().AlwaysRebuild() && !NeedRebuildFunc)
      return E;
  
@@ -2656,7 +2332,7 @@ index 53107c827006..a39dd6ecb468 100644
  
  template <typename Derived>
 diff --git a/clang/lib/Serialization/ASTReaderStmt.cpp b/clang/lib/Serialization/ASTReaderStmt.cpp
-index 02ccf8d4d41c..7eea0e626e59 100644
+index 87cec16a7..8c1315427 100644
 --- a/clang/lib/Serialization/ASTReaderStmt.cpp
 +++ b/clang/lib/Serialization/ASTReaderStmt.cpp
 @@ -1381,6 +1381,7 @@ void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
@@ -2668,7 +2344,7 @@ index 02ccf8d4d41c..7eea0e626e59 100644
  
  void ASTStmtReader::VisitEmbedExpr(EmbedExpr *E) {
 diff --git a/clang/lib/Serialization/ASTWriterStmt.cpp b/clang/lib/Serialization/ASTWriterStmt.cpp
-index 4e9eadd730a5..2654396e92be 100644
+index 70477f4cf..500e7155b 100644
 --- a/clang/lib/Serialization/ASTWriterStmt.cpp
 +++ b/clang/lib/Serialization/ASTWriterStmt.cpp
 @@ -1334,6 +1334,7 @@ void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
@@ -2679,26 +2355,9 @@ index 4e9eadd730a5..2654396e92be 100644
    Code = serialization::EXPR_SOURCE_LOC;
  }
  
-diff --git a/clang/test/Driver/unknown-std.cpp b/clang/test/Driver/unknown-std.cpp
-index 5c58042a0a2c..6c8fcd441a85 100644
---- a/clang/test/Driver/unknown-std.cpp
-+++ b/clang/test/Driver/unknown-std.cpp
-@@ -22,8 +22,10 @@
- // CHECK-NEXT: note: use 'gnu++20' for 'ISO C++ 2020 DIS with GNU extensions' standard
- // CHECK-NEXT: note: use 'c++23' for 'ISO C++ 2023 DIS' standard
- // CHECK-NEXT: note: use 'gnu++23' for 'ISO C++ 2023 DIS with GNU extensions' standard
--// CHECK-NEXT: note: use 'c++2c' or 'c++26' for 'Working draft for C++2c' standard
--// CHECK-NEXT: note: use 'gnu++2c' or 'gnu++26' for 'Working draft for C++2c with GNU extensions' standard
-+// CHECK-NEXT: note: use 'c++2c' or 'c++26' for 'Working draft for C++26' standard
-+// CHECK-NEXT: note: use 'gnu++2c' or 'gnu++26' for 'Working draft for C++26 with GNU extensions' standard
-+// CHECK-NEXT: note: use 'c++2d' or 'c++29' for 'Working draft for C++2d' standard
-+// CHECK-NEXT: note: use 'gnu++2d' or 'gnu++29' for 'Working draft for C++2d with GNU extensions' standard
- 
- // Make sure that no other output is present.
- // CHECK-NOT: {{^.+$}}
 diff --git a/clang/test/Preprocessor/Inputs/media/nested/inside.txt b/clang/test/Preprocessor/Inputs/media/nested/inside.txt
 new file mode 100644
-index 000000000000..3293407bc9c9
+index 000000000..3293407bc
 --- /dev/null
 +++ b/clang/test/Preprocessor/Inputs/media/nested/inside.txt
 @@ -0,0 +1 @@
@@ -2706,7 +2365,7 @@ index 000000000000..3293407bc9c9
 \ No newline at end of file
 diff --git a/clang/test/Preprocessor/depend-dependencies.cpp b/clang/test/Preprocessor/depend-dependencies.cpp
 new file mode 100644
-index 000000000000..5b418623cfc8
+index 000000000..5b418623c
 --- /dev/null
 +++ b/clang/test/Preprocessor/depend-dependencies.cpp
 @@ -0,0 +1,11 @@
@@ -2723,7 +2382,7 @@ index 000000000000..5b418623cfc8
 +// CHECK-NEXT: single_byte.txt
 diff --git a/clang/test/Preprocessor/depend-export-dependencies.cpp b/clang/test/Preprocessor/depend-export-dependencies.cpp
 new file mode 100644
-index 000000000000..9359fab5bb00
+index 000000000..9359fab5b
 --- /dev/null
 +++ b/clang/test/Preprocessor/depend-export-dependencies.cpp
 @@ -0,0 +1,13 @@
@@ -2742,7 +2401,7 @@ index 000000000000..9359fab5bb00
 +// CHECK-NEXT: single_byte.txt
 diff --git a/clang/test/Preprocessor/depend-recursive-dependencies.cpp b/clang/test/Preprocessor/depend-recursive-dependencies.cpp
 new file mode 100644
-index 000000000000..297efaa6c50d
+index 000000000..297efaa6c
 --- /dev/null
 +++ b/clang/test/Preprocessor/depend-recursive-dependencies.cpp
 @@ -0,0 +1,12 @@
@@ -2760,10 +2419,10 @@ index 000000000000..297efaa6c50d
 +// CHECK-NEXT: Inputs{{[/\\]}}jk.txt
 diff --git a/clang/test/SemaCXX/Inputs/resources/a/b/empty b/clang/test/SemaCXX/Inputs/resources/a/b/empty
 new file mode 100644
-index 000000000000..e69de29bb2d1
+index 000000000..e69de29bb
 diff --git a/clang/test/SemaCXX/Inputs/resources/art.bin b/clang/test/SemaCXX/Inputs/resources/art.bin
 new file mode 100644
-index 000000000000..c409d0d60a8e
+index 000000000..c409d0d60
 --- /dev/null
 +++ b/clang/test/SemaCXX/Inputs/resources/art.bin
 @@ -0,0 +1 @@
@@ -2771,7 +2430,7 @@ index 000000000000..c409d0d60a8e
 \ No newline at end of file
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp
 new file mode 100644
-index 000000000000..bd7c8610ba0f
+index 000000000..bd7c8610b
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed-art.cpp
 @@ -0,0 +1,198 @@
@@ -2975,7 +2634,7 @@ index 000000000000..bd7c8610ba0f
 +static_assert(limit());
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed-errors.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed-errors.cpp
 new file mode 100644
-index 000000000000..0a44c1b81e09
+index 000000000..0a44c1b81
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed-errors.cpp
 @@ -0,0 +1,40 @@
@@ -3021,7 +2680,7 @@ index 000000000000..0a44c1b81e09
 +}
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp
 new file mode 100644
-index 000000000000..dc9cfa3932c4
+index 000000000..dc9cfa393
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed-local_file.cpp
 @@ -0,0 +1,73 @@
@@ -3100,7 +2759,7 @@ index 000000000000..dc9cfa3932c4
 +static_assert(local_file());
 diff --git a/clang/test/SemaCXX/consteval-builtin-std-embed.cpp b/clang/test/SemaCXX/consteval-builtin-std-embed.cpp
 new file mode 100644
-index 000000000000..4b8352ed896d
+index 000000000..4b8352ed8
 --- /dev/null
 +++ b/clang/test/SemaCXX/consteval-builtin-std-embed.cpp
 @@ -0,0 +1,192 @@
@@ -3297,10 +2956,10 @@ index 000000000000..4b8352ed896d
 +static_assert(not_depended_on());
 +static_assert(empty());
 diff --git a/clang/test/SemaCXX/source_location.cpp b/clang/test/SemaCXX/source_location.cpp
-index eaa6cb04c5d1..944dc963dbdd 100644
+index 1ede22eaf..e7b9cba0f 100644
 --- a/clang/test/SemaCXX/source_location.cpp
 +++ b/clang/test/SemaCXX/source_location.cpp
-@@ -1091,3 +1091,37 @@ namespace GH178324 {
+@@ -1079,3 +1079,37 @@ namespace GH178324 {
    template <class> void c() { decltype(a(current()))::e; }
  } // namespace GH178324
  #endif
@@ -3339,7 +2998,7 @@ index eaa6cb04c5d1..944dc963dbdd 100644
 +
 +static_assert(numeric_sl_a_b() == 3'341);
 diff --git a/clang/tools/clang-import-test/clang-import-test.cpp b/clang/tools/clang-import-test/clang-import-test.cpp
-index 8e83687d3e96..2234f44c0611 100644
+index 8e83687d3..2234f44c0 100644
 --- a/clang/tools/clang-import-test/clang-import-test.cpp
 +++ b/clang/tools/clang-import-test/clang-import-test.cpp
 @@ -229,6 +229,8 @@ BuildASTContext(CompilerInstance &CI, SelectorTable &ST, Builtin::Context &BC) {
@@ -3352,7 +3011,7 @@ index 8e83687d3e96..2234f44c0611 100644
  }
  
 diff --git a/clang/unittests/Lex/PPCallbacksTest.cpp b/clang/unittests/Lex/PPCallbacksTest.cpp
-index 9533fbc776e6..f3b89db0be8c 100644
+index 9533fbc77..f3b89db0b 100644
 --- a/clang/unittests/Lex/PPCallbacksTest.cpp
 +++ b/clang/unittests/Lex/PPCallbacksTest.cpp
 @@ -311,6 +311,7 @@ protected:
@@ -3363,24 +3022,11 @@ index 9533fbc776e6..f3b89db0be8c 100644
  
      ASTConsumer Consumer;
      Sema S(PP, Context, Consumer);
-diff --git a/clang/www/OpenProjects.html b/clang/www/OpenProjects.html
-index 3e5e84b5b2ed..71ce7ecf416d 100755
---- a/clang/www/OpenProjects.html
-+++ b/clang/www/OpenProjects.html
-@@ -112,7 +112,7 @@ improve the quality of clang by self-testing. Some examples:
- </ul>
- </li>
- 
--<li><b>Continue work on C++20, C++23, C++2c, and C23 support</b>:
-+<li><b>Continue work on C++20, C++23, C++2c, C++2d, and C23 support</b>:
-   There are still several C++20 features to complete, and work has begun on
-   supporting the latest language standards. Please see the
-   <a href="cxx_status.html">C++ status report page</a> to find out what is
 diff --git a/clang/www/cxx_status.html b/clang/www/cxx_status.html
-index f96b0cafcf2c..92cf953715f2 100755
+index 0675f785b..d97c9513a 100755
 --- a/clang/www/cxx_status.html
 +++ b/clang/www/cxx_status.html
-@@ -484,6 +484,12 @@ C++23, informally referred to as C++26.</p>
+@@ -492,6 +492,12 @@ C++23, informally referred to as C++26.</p>
     <td><a href="https://wg21.link/P3769">P3769R1</a>(<a href="#dr">DR</a>)</td>
     <td class="none" align="center">No</td>
   </tr>
@@ -3394,10 +3040,10 @@ index f96b0cafcf2c..92cf953715f2 100755
  </details>
  
 diff --git a/libcxx/docs/FeatureTestMacroTable.rst b/libcxx/docs/FeatureTestMacroTable.rst
-index 8e26bdcd860c..98877e8bd5c1 100644
+index 6bf2f35fb..e9281b360 100644
 --- a/libcxx/docs/FeatureTestMacroTable.rst
 +++ b/libcxx/docs/FeatureTestMacroTable.rst
-@@ -545,5 +545,9 @@ Status
+@@ -547,5 +547,9 @@ Status
      ``__cpp_lib_tuple_like``                                   *unimplemented*
      ---------------------------------------------------------- -----------------
      ``__cpp_lib_variant``                                      ``202306L``
@@ -3409,7 +3055,7 @@ index 8e26bdcd860c..98877e8bd5c1 100644
  
 diff --git a/libcxx/docs/Status/Cxx2d.rst b/libcxx/docs/Status/Cxx2d.rst
 new file mode 100644
-index 000000000000..dfc308de7813
+index 000000000..dfc308de7
 --- /dev/null
 +++ b/libcxx/docs/Status/Cxx2d.rst
 @@ -0,0 +1,43 @@
@@ -3458,7 +3104,7 @@ index 000000000000..dfc308de7813
 +   :widths: auto
 diff --git a/libcxx/docs/Status/Cxx2dIssues.csv b/libcxx/docs/Status/Cxx2dIssues.csv
 new file mode 100644
-index 000000000000..1145255a2c39
+index 000000000..1145255a2
 --- /dev/null
 +++ b/libcxx/docs/Status/Cxx2dIssues.csv
 @@ -0,0 +1,2 @@
@@ -3466,10 +3112,10 @@ index 000000000000..1145255a2c39
 +"","","","","","",""
 diff --git a/libcxx/docs/Status/Cxx2dIssues.csvgb b/libcxx/docs/Status/Cxx2dIssues.csvgb
 new file mode 100644
-index 000000000000..e69de29bb2d1
+index 000000000..e69de29bb
 diff --git a/libcxx/docs/Status/Cxx2dPapers.csv b/libcxx/docs/Status/Cxx2dPapers.csv
 new file mode 100644
-index 000000000000..fd38c16435f4
+index 000000000..fd38c1643
 --- /dev/null
 +++ b/libcxx/docs/Status/Cxx2dPapers.csv
 @@ -0,0 +1,3 @@
@@ -3477,10 +3123,10 @@ index 000000000000..fd38c16435f4
 +"`P1040R10 <https://wg21.link/P1040R10>`__","``std::embed``","2026-06 (Brno)","","","`#190578 <https://github.com/llvm/llvm-project/pull/190578>`__","Experimental"
 +"", "", "", "", "", "", ""
 diff --git a/libcxx/include/CMakeLists.txt b/libcxx/include/CMakeLists.txt
-index cb7ae820bc01..5f3f042332c7 100644
+index b40f58616..39c834db1 100644
 --- a/libcxx/include/CMakeLists.txt
 +++ b/libcxx/include/CMakeLists.txt
-@@ -1011,6 +1011,7 @@ set(files
+@@ -1014,6 +1014,7 @@ set(files
    cwchar
    cwctype
    deque
@@ -3489,7 +3135,7 @@ index cb7ae820bc01..5f3f042332c7 100644
    exception
    execution
 diff --git a/libcxx/include/__configuration/language.h b/libcxx/include/__configuration/language.h
-index 3137ba2ea27e..ebc197515960 100644
+index 120593433..186bba982 100644
 --- a/libcxx/include/__configuration/language.h
 +++ b/libcxx/include/__configuration/language.h
 @@ -31,9 +31,11 @@
@@ -3508,7 +3154,7 @@ index 3137ba2ea27e..ebc197515960 100644
  // NOLINTEND(libcpp-cpp-version-check)
 diff --git a/libcxx/include/embed b/libcxx/include/embed
 new file mode 100644
-index 000000000000..c9e28795af0c
+index 000000000..c9e28795a
 --- /dev/null
 +++ b/libcxx/include/embed
 @@ -0,0 +1,290 @@
@@ -3803,10 +3449,10 @@ index 000000000000..c9e28795af0c
 +
 +#endif // _LIBCPP_EMBED
 diff --git a/libcxx/include/version b/libcxx/include/version
-index 7f2dc9e4b72a..f6724e9d386d 100644
+index 4a6b01093..4a6076c6e 100644
 --- a/libcxx/include/version
 +++ b/libcxx/include/version
-@@ -103,6 +103,7 @@ __cpp_lib_default_template_type_for_algorithm_values    202403L <algorithm> <deq
+@@ -104,6 +104,7 @@ __cpp_lib_default_template_type_for_algorithm_values    202403L <algorithm> <deq
                                                                  <list> <ranges> <string>
                                                                  <vector>
  __cpp_lib_destroying_delete                             201806L <new>
@@ -3814,7 +3460,7 @@ index 7f2dc9e4b72a..f6724e9d386d 100644
  __cpp_lib_enable_shared_from_this                       201603L <memory>
  __cpp_lib_endian                                        201907L <bit>
  __cpp_lib_erase_if                                      202002L <deque> <forward_list> <list>
-@@ -643,6 +644,12 @@ __cpp_lib_void_t                                        201411L <type_traits>
+@@ -645,6 +646,12 @@ __cpp_lib_void_t                                        201411L <type_traits>
  # define __cpp_lib_variant                              202306L
  #endif
  
@@ -3828,7 +3474,7 @@ index 7f2dc9e4b72a..f6724e9d386d 100644
  
  // clang-format on
 diff --git a/libcxx/modules/std.cppm.in b/libcxx/modules/std.cppm.in
-index 6de6369c3387..6809dec54395 100644
+index b9a491653..38c2ca5f9 100644
 --- a/libcxx/modules/std.cppm.in
 +++ b/libcxx/modules/std.cppm.in
 @@ -54,6 +54,7 @@ module;
@@ -3841,14 +3487,14 @@ index 6de6369c3387..6809dec54395 100644
  #include <expected>
 diff --git a/libcxx/test/std/embed/a.txt b/libcxx/test/std/embed/a.txt
 new file mode 100644
-index 000000000000..78981922613b
+index 000000000..789819226
 --- /dev/null
 +++ b/libcxx/test/std/embed/a.txt
 @@ -0,0 +1 @@
 +a
 diff --git a/libcxx/test/std/embed/embed-mandates.verify.cpp b/libcxx/test/std/embed/embed-mandates.verify.cpp
 new file mode 100644
-index 000000000000..78d40fda227d
+index 000000000..78d40fda2
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-mandates.verify.cpp
 @@ -0,0 +1,35 @@
@@ -3889,7 +3535,7 @@ index 000000000000..78d40fda227d
 +}
 diff --git a/libcxx/test/std/embed/embed-nodiscard.verify.cpp b/libcxx/test/std/embed/embed-nodiscard.verify.cpp
 new file mode 100644
-index 000000000000..4c9fe179f5ed
+index 000000000..4c9fe179f
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-nodiscard.verify.cpp
 @@ -0,0 +1,49 @@
@@ -3944,7 +3590,7 @@ index 000000000000..4c9fe179f5ed
 +}
 diff --git a/libcxx/test/std/embed/embed-post-conditions.pass.cpp b/libcxx/test/std/embed/embed-post-conditions.pass.cpp
 new file mode 100644
-index 000000000000..6d33670b1fb4
+index 000000000..6d33670b1
 --- /dev/null
 +++ b/libcxx/test/std/embed/embed-post-conditions.pass.cpp
 @@ -0,0 +1,63 @@
@@ -4013,9 +3659,9 @@ index 000000000000..6d33670b1fb4
 +}
 diff --git a/libcxx/test/std/embed/empty b/libcxx/test/std/embed/empty
 new file mode 100644
-index 000000000000..e69de29bb2d1
+index 000000000..e69de29bb
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp
-index 657875444c68..133d4bf592f3 100644
+index 657875444..133d4bf59 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/algorithm.version.compile.pass.cpp
 @@ -375,7 +375,7 @@
@@ -4147,7 +3793,7 @@ index 657875444c68..133d4bf592f3 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/any.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/any.version.compile.pass.cpp
-index fe0e6bd17f94..6c08175a5285 100644
+index fe0e6bd17..6c08175a5 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/any.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/any.version.compile.pass.cpp
 @@ -57,7 +57,7 @@
@@ -4177,7 +3823,7 @@ index fe0e6bd17f94..6c08175a5285 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/array.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/array.version.compile.pass.cpp
-index 30efb61893a1..5f5dc28e5ba2 100644
+index 30efb6189..5f5dc28e5 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/array.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/array.version.compile.pass.cpp
 @@ -132,7 +132,7 @@
@@ -4234,7 +3880,7 @@ index 30efb61893a1..5f5dc28e5ba2 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/atomic.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/atomic.version.compile.pass.cpp
-index e62416257a69..4ca5d4492edb 100644
+index e62416257..4ca5d4492 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/atomic.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/atomic.version.compile.pass.cpp
 @@ -309,7 +309,7 @@
@@ -4345,7 +3991,7 @@ index e62416257a69..4ca5d4492edb 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/barrier.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/barrier.version.compile.pass.cpp
-index 01cda62c06a6..4171deef44c4 100644
+index 01cda62c0..4171deef4 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/barrier.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/barrier.version.compile.pass.cpp
 @@ -68,7 +68,7 @@
@@ -4381,7 +4027,7 @@ index 01cda62c06a6..4171deef44c4 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/bit.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/bit.version.compile.pass.cpp
-index cad025eee337..39df8f7ed649 100644
+index cad025eee..39df8f7ed 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/bit.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/bit.version.compile.pass.cpp
 @@ -155,7 +155,7 @@
@@ -4439,7 +4085,7 @@ index cad025eee337..39df8f7ed649 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/bitset.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/bitset.version.compile.pass.cpp
-index 8799a1f7d14e..22c431927052 100644
+index 8799a1f7d..22c431927 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/bitset.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/bitset.version.compile.pass.cpp
 @@ -71,7 +71,7 @@
@@ -4476,7 +4122,7 @@ index 8799a1f7d14e..22c431927052 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/charconv.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/charconv.version.compile.pass.cpp
-index 6ec3037c9ea4..2d1b41149213 100644
+index 6ec3037c9..2d1b41149 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/charconv.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/charconv.version.compile.pass.cpp
 @@ -98,7 +98,7 @@
@@ -4519,7 +4165,7 @@ index 6ec3037c9ea4..2d1b41149213 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/chrono.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/chrono.version.compile.pass.cpp
-index d5d7a5da4a64..cd65a25c408e 100644
+index d5d7a5da4..cd65a25c4 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/chrono.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/chrono.version.compile.pass.cpp
 @@ -89,7 +89,7 @@
@@ -4556,7 +4202,7 @@ index d5d7a5da4a64..cd65a25c408e 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/cmath.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/cmath.version.compile.pass.cpp
-index 26ebe1e3ad6b..c257f561d39c 100644
+index 26ebe1e3a..c257f561d 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/cmath.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/cmath.version.compile.pass.cpp
 @@ -159,7 +159,7 @@
@@ -4619,7 +4265,7 @@ index 26ebe1e3ad6b..c257f561d39c 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/compare.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/compare.version.compile.pass.cpp
-index 907535a087de..8b0bcbc9e2b3 100644
+index 907535a08..8b0bcbc9e 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/compare.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/compare.version.compile.pass.cpp
 @@ -54,7 +54,7 @@
@@ -4649,7 +4295,7 @@ index 907535a087de..8b0bcbc9e2b3 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/complex.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/complex.version.compile.pass.cpp
-index 9a3a644ca5d6..388ecdd90e5d 100644
+index 9a3a644ca..388ecdd90 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/complex.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/complex.version.compile.pass.cpp
 @@ -86,7 +86,7 @@
@@ -4686,7 +4332,7 @@ index 9a3a644ca5d6..388ecdd90e5d 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/concepts.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/concepts.version.compile.pass.cpp
-index 15f1d30060ef..276930078f2e 100644
+index 15f1d3006..276930078 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/concepts.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/concepts.version.compile.pass.cpp
 @@ -54,7 +54,7 @@
@@ -4716,7 +4362,7 @@ index 15f1d30060ef..276930078f2e 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/coroutine.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/coroutine.version.compile.pass.cpp
-index 24a9eca1e234..ee52ac1a2407 100644
+index 24a9eca1e..ee52ac1a2 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/coroutine.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/coroutine.version.compile.pass.cpp
 @@ -54,7 +54,7 @@
@@ -4746,7 +4392,7 @@ index 24a9eca1e234..ee52ac1a2407 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/cstddef.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/cstddef.version.compile.pass.cpp
-index bc65a7f3cae0..4721ab4b20a3 100644
+index bc65a7f3c..4721ab4b2 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/cstddef.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/cstddef.version.compile.pass.cpp
 @@ -57,7 +57,7 @@
@@ -4776,7 +4422,7 @@ index bc65a7f3cae0..4721ab4b20a3 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/cstdlib.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/cstdlib.version.compile.pass.cpp
-index 600fa2eb2e4f..a0166dc12d59 100644
+index 600fa2eb2..a0166dc12 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/cstdlib.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/cstdlib.version.compile.pass.cpp
 @@ -57,7 +57,7 @@
@@ -4812,7 +4458,7 @@ index 600fa2eb2e4f..a0166dc12d59 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/cstring.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/cstring.version.compile.pass.cpp
-index 8445aa3cf0c4..c6b8d335f536 100644
+index 8445aa3cf..c6b8d335f 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/cstring.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/cstring.version.compile.pass.cpp
 @@ -48,7 +48,7 @@
@@ -4848,7 +4494,7 @@ index 8445aa3cf0c4..c6b8d335f536 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/deque.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/deque.version.compile.pass.cpp
-index b634f3253093..e8dde05dd7b0 100644
+index b634f3253..e8dde05dd 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/deque.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/deque.version.compile.pass.cpp
 @@ -155,7 +155,7 @@
@@ -4913,7 +4559,7 @@ index b634f3253093..e8dde05dd7b0 100644
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/embed.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/embed.version.compile.pass.cpp
 new file mode 100644
-index 000000000000..01a702bddf88
+index 000000000..01a702bdd
 --- /dev/null
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/embed.version.compile.pass.cpp
 @@ -0,0 +1,74 @@
@@ -4992,7 +4638,7 @@ index 000000000000..01a702bddf88
 +
 +// clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/exception.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/exception.version.compile.pass.cpp
-index 11d5735007f5..8d15c9297f0d 100644
+index 11d573500..8d15c9297 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/exception.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/exception.version.compile.pass.cpp
 @@ -57,7 +57,7 @@
@@ -5022,7 +4668,7 @@ index 11d5735007f5..8d15c9297f0d 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/execution.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/execution.version.compile.pass.cpp
-index 77a6455e2330..da849ec6296d 100644
+index 77a6455e2..da849ec62 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/execution.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/execution.version.compile.pass.cpp
 @@ -95,7 +95,7 @@
@@ -5071,7 +4717,7 @@ index 77a6455e2330..da849ec6296d 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/expected.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/expected.version.compile.pass.cpp
-index 4ec6c469dce4..7c25c805a940 100644
+index 4ec6c469d..7c25c805a 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/expected.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/expected.version.compile.pass.cpp
 @@ -91,7 +91,7 @@
@@ -5121,7 +4767,7 @@ index 4ec6c469dce4..7c25c805a940 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/filesystem.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/filesystem.version.compile.pass.cpp
-index 70ba1800f64f..de5117a28bdb 100644
+index 70ba1800f..de5117a28 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/filesystem.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/filesystem.version.compile.pass.cpp
 @@ -135,7 +135,7 @@
@@ -5183,7 +4829,7 @@ index 70ba1800f64f..de5117a28bdb 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/flat_map.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/flat_map.version.compile.pass.cpp
-index 34820de6a53a..d0489eadb257 100644
+index 34820de6a..d0489eadb 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/flat_map.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/flat_map.version.compile.pass.cpp
 @@ -71,7 +71,7 @@
@@ -5220,7 +4866,7 @@ index 34820de6a53a..d0489eadb257 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/flat_set.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/flat_set.version.compile.pass.cpp
-index 725e5107c899..7c1cba1d1d57 100644
+index 725e5107c..7c1cba1d1 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/flat_set.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/flat_set.version.compile.pass.cpp
 @@ -71,7 +71,7 @@
@@ -5257,7 +4903,7 @@ index 725e5107c899..7c1cba1d1d57 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/format.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/format.version.compile.pass.cpp
-index 77730f17fd9c..af6a25c057c2 100644
+index 77730f17f..af6a25c05 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/format.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/format.version.compile.pass.cpp
 @@ -115,7 +115,7 @@
@@ -5307,7 +4953,7 @@ index 77730f17fd9c..af6a25c057c2 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/forward_list.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/forward_list.version.compile.pass.cpp
-index d2082946597c..e2e7c750decd 100644
+index d20829465..e2e7c750d 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/forward_list.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/forward_list.version.compile.pass.cpp
 @@ -230,7 +230,7 @@
@@ -5392,7 +5038,7 @@ index d2082946597c..e2e7c750decd 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/fstream.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/fstream.version.compile.pass.cpp
-index f67adb0de1de..56a41997c2b3 100644
+index f67adb0de..56a41997c 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/fstream.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/fstream.version.compile.pass.cpp
 @@ -50,7 +50,7 @@
@@ -5428,7 +5074,7 @@ index f67adb0de1de..56a41997c2b3 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/functional.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/functional.version.compile.pass.cpp
-index b7b7d0334830..b6ddfd2c68e8 100644
+index b7b7d0334..b6ddfd2c6 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/functional.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/functional.version.compile.pass.cpp
 @@ -444,7 +444,7 @@
@@ -5581,7 +5227,7 @@ index b7b7d0334830..b6ddfd2c68e8 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/iomanip.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/iomanip.version.compile.pass.cpp
-index 4de327cbfa26..33e11f3d6afa 100644
+index 4de327cbf..33e11f3d6 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/iomanip.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/iomanip.version.compile.pass.cpp
 @@ -86,7 +86,7 @@
@@ -5617,7 +5263,7 @@ index 4de327cbfa26..33e11f3d6afa 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/ios.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/ios.version.compile.pass.cpp
-index 68816936c55e..91c5f7c1f590 100644
+index 68816936c..91c5f7c1f 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/ios.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/ios.version.compile.pass.cpp
 @@ -53,7 +53,7 @@
@@ -5647,7 +5293,7 @@ index 68816936c55e..91c5f7c1f590 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/istream.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/istream.version.compile.pass.cpp
-index a1178b22776f..42e95edb5d7d 100644
+index a1178b227..42e95edb5 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/istream.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/istream.version.compile.pass.cpp
 @@ -68,7 +68,7 @@
@@ -5683,7 +5329,7 @@ index a1178b22776f..42e95edb5d7d 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/iterator.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/iterator.version.compile.pass.cpp
-index e9805ed4b154..bb251f001b42 100644
+index e9805ed4b..bb251f001 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/iterator.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/iterator.version.compile.pass.cpp
 @@ -254,7 +254,7 @@
@@ -5762,7 +5408,7 @@ index e9805ed4b154..bb251f001b42 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/latch.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/latch.version.compile.pass.cpp
-index 8be3c800c9ba..f593764cd8c8 100644
+index 8be3c800c..f593764cd 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/latch.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/latch.version.compile.pass.cpp
 @@ -68,7 +68,7 @@
@@ -5798,7 +5444,7 @@ index 8be3c800c9ba..f593764cd8c8 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/limits.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/limits.version.compile.pass.cpp
-index f4cc8db0f54c..fb18e3a88a69 100644
+index f4cc8db0f..fb18e3a88 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/limits.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/limits.version.compile.pass.cpp
 @@ -66,7 +66,7 @@
@@ -5834,7 +5480,7 @@ index f4cc8db0f54c..fb18e3a88a69 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/list.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/list.version.compile.pass.cpp
-index 1407d74e03aa..15aa665c0fea 100644
+index 1407d74e0..15aa665c0 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/list.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/list.version.compile.pass.cpp
 @@ -230,7 +230,7 @@
@@ -5919,7 +5565,7 @@ index 1407d74e03aa..15aa665c0fea 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/locale.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/locale.version.compile.pass.cpp
-index f516881651b2..2b93c27899ad 100644
+index f51688165..2b93c2789 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/locale.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/locale.version.compile.pass.cpp
 @@ -68,7 +68,7 @@
@@ -5955,7 +5601,7 @@ index f516881651b2..2b93c27899ad 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/map.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/map.version.compile.pass.cpp
-index 794c2ee9ad08..09eb6471c120 100644
+index 794c2ee9a..09eb6471c 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/map.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/map.version.compile.pass.cpp
 @@ -323,7 +323,7 @@
@@ -6073,7 +5719,7 @@ index 794c2ee9ad08..09eb6471c120 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/mdspan.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/mdspan.version.compile.pass.cpp
-index fad0e5b9777d..051a307d3189 100644
+index fad0e5b97..051a307d3 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/mdspan.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/mdspan.version.compile.pass.cpp
 @@ -111,7 +111,7 @@
@@ -6136,7 +5782,7 @@ index fad0e5b9777d..051a307d3189 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/memory.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/memory.version.compile.pass.cpp
-index c58357a463ff..9e19825af6a2 100644
+index c58357a46..9e19825af 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/memory.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/memory.version.compile.pass.cpp
 @@ -534,7 +534,7 @@
@@ -6298,7 +5944,7 @@ index c58357a463ff..9e19825af6a2 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/memory_resource.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/memory_resource.version.compile.pass.cpp
-index dddf473f86a4..045e7c280e04 100644
+index dddf473f8..045e7c280 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/memory_resource.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/memory_resource.version.compile.pass.cpp
 @@ -113,7 +113,7 @@
@@ -6347,7 +5993,7 @@ index dddf473f86a4..045e7c280e04 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/mutex.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/mutex.version.compile.pass.cpp
-index 5ffa5df8841c..faa8f5b9fe96 100644
+index 5ffa5df88..faa8f5b9f 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/mutex.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/mutex.version.compile.pass.cpp
 @@ -77,7 +77,7 @@
@@ -6383,7 +6029,7 @@ index 5ffa5df8841c..faa8f5b9fe96 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/new.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/new.version.compile.pass.cpp
-index fd2332f104f3..7b6e3b152dd8 100644
+index fd2332f10..7b6e3b152 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/new.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/new.version.compile.pass.cpp
 @@ -144,7 +144,7 @@
@@ -6446,7 +6092,7 @@ index fd2332f104f3..7b6e3b152dd8 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/numbers.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/numbers.version.compile.pass.cpp
-index 27170d1ea0ce..8e6bed209fd2 100644
+index 27170d1ea..8e6bed209 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/numbers.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/numbers.version.compile.pass.cpp
 @@ -54,7 +54,7 @@
@@ -6476,7 +6122,7 @@ index 27170d1ea0ce..8e6bed209fd2 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/numeric.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/numeric.version.compile.pass.cpp
-index d629407c9b64..3770febcd529 100644
+index d629407c9..3770febcd 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/numeric.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/numeric.version.compile.pass.cpp
 @@ -199,7 +199,7 @@
@@ -6547,7 +6193,7 @@ index d629407c9b64..3770febcd529 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/optional.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/optional.version.compile.pass.cpp
-index 9850c20afec8..63808fd08ed1 100644
+index 9850c20af..63808fd08 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/optional.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/optional.version.compile.pass.cpp
 @@ -117,7 +117,7 @@
@@ -6610,7 +6256,7 @@ index 9850c20afec8..63808fd08ed1 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/ostream.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/ostream.version.compile.pass.cpp
-index 163ea5b5514e..94c4c8c067b7 100644
+index 163ea5b55..94c4c8c06 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/ostream.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/ostream.version.compile.pass.cpp
 @@ -97,7 +97,7 @@
@@ -6659,7 +6305,7 @@ index 163ea5b5514e..94c4c8c067b7 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/print.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/print.version.compile.pass.cpp
-index 0382d93cb40c..c0bba4f49355 100644
+index 0382d93cb..c0bba4f49 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/print.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/print.version.compile.pass.cpp
 @@ -59,7 +59,7 @@
@@ -6695,7 +6341,7 @@ index 0382d93cb40c..c0bba4f49355 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/queue.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/queue.version.compile.pass.cpp
-index db32433ff518..8747e421f84c 100644
+index db32433ff..8747e421f 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/queue.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/queue.version.compile.pass.cpp
 @@ -94,7 +94,7 @@
@@ -6739,7 +6385,7 @@ index db32433ff518..8747e421f84c 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/random.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/random.version.compile.pass.cpp
-index d0ede1168dfa..d80581f227cc 100644
+index d0ede1168..d80581f22 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/random.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/random.version.compile.pass.cpp
 @@ -68,7 +68,7 @@
@@ -6788,7 +6434,7 @@ index d0ede1168dfa..d80581f227cc 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/ranges.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/ranges.version.compile.pass.cpp
-index 670b0e664721..bb59b52b99cb 100644
+index 670b0e664..bb59b52b9 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/ranges.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/ranges.version.compile.pass.cpp
 @@ -385,7 +385,7 @@
@@ -6940,7 +6586,7 @@ index 670b0e664721..bb59b52b99cb 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/ratio.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/ratio.version.compile.pass.cpp
-index b7c08fe0de42..faf0b608a4a7 100644
+index b7c08fe0d..faf0b608a 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/ratio.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/ratio.version.compile.pass.cpp
 @@ -48,7 +48,7 @@
@@ -6970,7 +6616,7 @@ index b7c08fe0de42..faf0b608a4a7 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/regex.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/regex.version.compile.pass.cpp
-index dc27dc91851a..a104ddad5367 100644
+index dc27dc918..a104ddad5 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/regex.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/regex.version.compile.pass.cpp
 @@ -59,7 +59,7 @@
@@ -7000,7 +6646,7 @@ index dc27dc91851a..a104ddad5367 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/scoped_allocator.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/scoped_allocator.version.compile.pass.cpp
-index 9dc2d8b87664..fd627a2b82e2 100644
+index 9dc2d8b87..fd627a2b8 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/scoped_allocator.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/scoped_allocator.version.compile.pass.cpp
 @@ -57,7 +57,7 @@
@@ -7030,7 +6676,7 @@ index 9dc2d8b87664..fd627a2b82e2 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/semaphore.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/semaphore.version.compile.pass.cpp
-index 9912804043c4..97526117370b 100644
+index 991280404..975261173 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/semaphore.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/semaphore.version.compile.pass.cpp
 @@ -68,7 +68,7 @@
@@ -7066,10 +6712,10 @@ index 9912804043c4..97526117370b 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/set.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/set.version.compile.pass.cpp
-index 5dc69f29d0ec..aa7545c008bd 100644
+index d1a057055..020c79520 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/set.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/set.version.compile.pass.cpp
-@@ -245,7 +245,7 @@
+@@ -265,7 +265,7 @@
  #    error "__cpp_lib_nonmember_container_access should have the value 201411L in c++23"
  #  endif
  
@@ -7078,7 +6724,7 @@ index 5dc69f29d0ec..aa7545c008bd 100644
  
  #  ifndef __cpp_lib_allocator_traits_is_always_equal
  #    error "__cpp_lib_allocator_traits_is_always_equal should be defined in c++26"
-@@ -315,6 +315,76 @@
+@@ -342,6 +342,76 @@
  #    error "__cpp_lib_nonmember_container_access should have the value 201411L in c++26"
  #  endif
  
@@ -7157,7 +6803,7 @@ index 5dc69f29d0ec..aa7545c008bd 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/shared_mutex.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/shared_mutex.version.compile.pass.cpp
-index 51feff2195c3..8cd96283ad1a 100644
+index 51feff219..8cd96283a 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/shared_mutex.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/shared_mutex.version.compile.pass.cpp
 @@ -133,7 +133,7 @@
@@ -7206,7 +6852,7 @@ index 51feff2195c3..8cd96283ad1a 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/source_location.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/source_location.version.compile.pass.cpp
-index 9495e319521c..d89049ce4ad3 100644
+index 9495e3195..d89049ce4 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/source_location.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/source_location.version.compile.pass.cpp
 @@ -54,7 +54,7 @@
@@ -7236,7 +6882,7 @@ index 9495e319521c..d89049ce4ad3 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/span.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/span.version.compile.pass.cpp
-index 28c54acd0fda..9fc49192a4f5 100644
+index 28c54acd0..9fc49192a 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/span.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/span.version.compile.pass.cpp
 @@ -74,7 +74,7 @@
@@ -7273,7 +6919,7 @@ index 28c54acd0fda..9fc49192a4f5 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/sstream.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/sstream.version.compile.pass.cpp
-index 992e31ed602e..e07860e349da 100644
+index 992e31ed6..e07860e34 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/sstream.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/sstream.version.compile.pass.cpp
 @@ -50,7 +50,7 @@
@@ -7303,7 +6949,7 @@ index 992e31ed602e..e07860e349da 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/stack.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/stack.version.compile.pass.cpp
-index 61c5ed476228..cc06307be967 100644
+index 61c5ed476..cc06307be 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/stack.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/stack.version.compile.pass.cpp
 @@ -74,7 +74,7 @@
@@ -7340,7 +6986,7 @@ index 61c5ed476228..cc06307be967 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/stdatomic.h.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/stdatomic.h.version.compile.pass.cpp
-index c07d935106ea..15686fdbbeb0 100644
+index c07d93510..15686fdbb 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/stdatomic.h.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/stdatomic.h.version.compile.pass.cpp
 @@ -53,7 +53,7 @@
@@ -7370,7 +7016,7 @@ index c07d935106ea..15686fdbbeb0 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/stop_token.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/stop_token.version.compile.pass.cpp
-index 1c240cee3bdc..6ee50693a00a 100644
+index 1c240cee3..6ee50693a 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/stop_token.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/stop_token.version.compile.pass.cpp
 @@ -68,7 +68,7 @@
@@ -7406,7 +7052,7 @@ index 1c240cee3bdc..6ee50693a00a 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/string.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/string.version.compile.pass.cpp
-index 147854eead2c..bcc78a9a4143 100644
+index 147854eea..bcc78a9a4 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/string.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/string.version.compile.pass.cpp
 @@ -392,7 +392,7 @@
@@ -7545,7 +7191,7 @@ index 147854eead2c..bcc78a9a4143 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/string_view.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/string_view.version.compile.pass.cpp
-index 2c3716111102..5b3f63883d2e 100644
+index 2c3716111..5b3f63883 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/string_view.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/string_view.version.compile.pass.cpp
 @@ -210,7 +210,7 @@
@@ -7629,7 +7275,7 @@ index 2c3716111102..5b3f63883d2e 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/syncstream.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/syncstream.version.compile.pass.cpp
-index 589b9ba5a75d..5b935275fada 100644
+index 589b9ba5a..5b935275f 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/syncstream.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/syncstream.version.compile.pass.cpp
 @@ -68,7 +68,7 @@
@@ -7665,7 +7311,7 @@ index 589b9ba5a75d..5b935275fada 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/thread.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/thread.version.compile.pass.cpp
-index 6b422f28dd79..a34afd4f5c65 100644
+index 6b422f28d..a34afd4f5 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/thread.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/thread.version.compile.pass.cpp
 @@ -97,7 +97,7 @@
@@ -7714,7 +7360,7 @@ index 6b422f28dd79..a34afd4f5c65 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/tuple.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/tuple.version.compile.pass.cpp
-index c0973c03f327..9f499f074c30 100644
+index c0973c03f..9f499f074 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/tuple.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/tuple.version.compile.pass.cpp
 @@ -248,7 +248,7 @@
@@ -7799,7 +7445,7 @@ index c0973c03f327..9f499f074c30 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/type_traits.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/type_traits.version.compile.pass.cpp
-index cb5c008f16bb..fbceb1410fab 100644
+index cb5c008f1..fbceb1410 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/type_traits.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/type_traits.version.compile.pass.cpp
 @@ -773,7 +773,7 @@
@@ -8040,7 +7686,7 @@ index cb5c008f16bb..fbceb1410fab 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/typeinfo.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/typeinfo.version.compile.pass.cpp
-index cf29080ea75b..8d2c45c1709f 100644
+index cf29080ea..8d2c45c17 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/typeinfo.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/typeinfo.version.compile.pass.cpp
 @@ -51,7 +51,7 @@
@@ -8070,7 +7716,7 @@ index cf29080ea75b..8d2c45c1709f 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/unordered_map.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/unordered_map.version.compile.pass.cpp
-index 221d8aaebc14..8d438527f1b8 100644
+index 221d8aaeb..8d438527f 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/unordered_map.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/unordered_map.version.compile.pass.cpp
 @@ -297,7 +297,7 @@
@@ -8181,7 +7827,7 @@ index 221d8aaebc14..8d438527f1b8 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/unordered_set.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/unordered_set.version.compile.pass.cpp
-index d1c1335df7c8..a4f861ce9ae1 100644
+index d1c1335df..a4f861ce9 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/unordered_set.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/unordered_set.version.compile.pass.cpp
 @@ -239,7 +239,7 @@
@@ -8272,7 +7918,7 @@ index d1c1335df7c8..a4f861ce9ae1 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/utility.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/utility.version.compile.pass.cpp
-index 8cbd16d242f7..0c7124a969ba 100644
+index bff6e905e..4fd03c1d6 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/utility.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/utility.version.compile.pass.cpp
 @@ -392,7 +392,7 @@
@@ -8399,7 +8045,7 @@ index 8cbd16d242f7..0c7124a969ba 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/variant.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/variant.version.compile.pass.cpp
-index ed0bb228d770..1fa89b2a7c3f 100644
+index ed0bb228d..1fa89b2a7 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/variant.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/variant.version.compile.pass.cpp
 @@ -97,7 +97,7 @@
@@ -8449,7 +8095,7 @@ index ed0bb228d770..1fa89b2a7c3f 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/vector.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/vector.version.compile.pass.cpp
-index e34800a89c95..354a5b1fdd4d 100644
+index e34800a89..354a5b1fd 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/vector.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/vector.version.compile.pass.cpp
 @@ -210,7 +210,7 @@
@@ -8527,10 +8173,10 @@ index e34800a89c95..354a5b1fdd4d 100644
  
  // clang-format on
 diff --git a/libcxx/test/std/language.support/support.limits/support.limits.general/version.version.compile.pass.cpp b/libcxx/test/std/language.support/support.limits/support.limits.general/version.version.compile.pass.cpp
-index d9c78b73f7e2..5b97563c66ea 100644
+index f2d74cc99..d3b298899 100644
 --- a/libcxx/test/std/language.support/support.limits/support.limits.general/version.version.compile.pass.cpp
 +++ b/libcxx/test/std/language.support/support.limits/support.limits.general/version.version.compile.pass.cpp
-@@ -304,6 +304,10 @@
+@@ -308,6 +308,10 @@
  #    error "__cpp_lib_destroying_delete should not be defined before c++20"
  #  endif
  
@@ -8541,7 +8187,7 @@ index d9c78b73f7e2..5b97563c66ea 100644
  #  ifdef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should not be defined before c++17"
  #  endif
-@@ -1240,6 +1244,10 @@
+@@ -1248,6 +1252,10 @@
  #    error "__cpp_lib_destroying_delete should not be defined before c++20"
  #  endif
  
@@ -8552,7 +8198,7 @@ index d9c78b73f7e2..5b97563c66ea 100644
  #  ifdef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should not be defined before c++17"
  #  endif
-@@ -2278,6 +2286,10 @@
+@@ -2290,6 +2298,10 @@
  #    error "__cpp_lib_destroying_delete should not be defined before c++20"
  #  endif
  
@@ -8563,7 +8209,7 @@ index d9c78b73f7e2..5b97563c66ea 100644
  #  ifndef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should be defined in c++17"
  #  endif
-@@ -3589,6 +3601,10 @@
+@@ -3605,6 +3617,10 @@
  #    endif
  #  endif
  
@@ -8574,7 +8220,7 @@ index d9c78b73f7e2..5b97563c66ea 100644
  #  ifndef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should be defined in c++20"
  #  endif
-@@ -5089,6 +5105,10 @@
+@@ -5109,6 +5125,10 @@
  #    endif
  #  endif
  
@@ -8585,7 +8231,7 @@ index d9c78b73f7e2..5b97563c66ea 100644
  #  ifndef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should be defined in c++23"
  #  endif
-@@ -6288,7 +6308,7 @@
+@@ -6308,7 +6328,7 @@
  #    error "__cpp_lib_void_t should have the value 201411L in c++23"
  #  endif
  
@@ -8594,7 +8240,7 @@ index d9c78b73f7e2..5b97563c66ea 100644
  
  #  ifndef __cpp_lib_adaptor_iterator_pair_constructor
  #    error "__cpp_lib_adaptor_iterator_pair_constructor should be defined in c++26"
-@@ -6859,6 +6879,10 @@
+@@ -6886,6 +6906,10 @@
  #    endif
  #  endif
  
@@ -8605,7 +8251,7 @@ index d9c78b73f7e2..5b97563c66ea 100644
  #  ifndef __cpp_lib_enable_shared_from_this
  #    error "__cpp_lib_enable_shared_from_this should be defined in c++26"
  #  endif
-@@ -8310,6 +8334,2041 @@
+@@ -8331,6 +8355,2041 @@
  #    error "__cpp_lib_void_t should have the value 201411L in c++26"
  #  endif
  
@@ -10649,10 +10295,10 @@ index d9c78b73f7e2..5b97563c66ea 100644
  
  // clang-format on
 diff --git a/libcxx/utils/generate_feature_test_macro_components.py b/libcxx/utils/generate_feature_test_macro_components.py
-index d764a1f677ba..db034e6acccd 100644
+index f4e16078d..22d4f378f 100644
 --- a/libcxx/utils/generate_feature_test_macro_components.py
 +++ b/libcxx/utils/generate_feature_test_macro_components.py
-@@ -519,6 +519,14 @@ feature_test_macros = [
+@@ -524,6 +524,14 @@ feature_test_macros = [
              "test_suite_guard": "defined(__cpp_impl_destroying_delete) && __cpp_impl_destroying_delete >= 201806L",
              "libcxx_guard": "defined(__cpp_impl_destroying_delete) && __cpp_impl_destroying_delete >= 201806L",
          },
@@ -10667,7 +10313,7 @@ index d764a1f677ba..db034e6acccd 100644
          {
              "name": "__cpp_lib_enable_shared_from_this",
              "values": {"c++17": 201603},
-@@ -1568,7 +1576,7 @@ lit_markup = {
+@@ -1572,7 +1580,7 @@ lit_markup = {
  
  
  def get_std_dialects():
@@ -10677,5 +10323,5 @@ index d764a1f677ba..db034e6acccd 100644
  
  
 -- 
-2.54.0
+2.43.0
 
