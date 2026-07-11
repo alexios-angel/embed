@@ -1,18 +1,29 @@
-From 5f7a550aa92dd4733cbaf8ba5a104c6ae15916c7 Mon Sep 17 00:00:00 2001
+From 2314701e23d02b36e9c8a95bb5c133ac6b0b74a6 Mon Sep 17 00:00:00 2001
 From: ThePhD <phdofthehouse@gmail.com>
 Date: Sat, 11 Jul 2026 04:45:27 -0400
 Subject: [PATCH] [clang][Lex][Sema] Full std::embed and #depend implementation
 
-Rebased onto llvm/main ced9fa358 for the latest Clang:
-  - dropped the C++2d/C++29 language-mode registration hunks (LangStandards,
-    LangStandard.h, LangOptions, DiagnosticGroups): upstream now provides the
-    c++2d standard mode natively.
-  - DiagnosticLexKinds.td: the #depend extension diagnostic now joins
-    upstream's existing CXX29 diagnostic group (was CXX2D).
+Rebased onto llvm/main (ced9fa358) for the latest Clang:
+  - dropped the C++2d/C++29 language-mode registration hunks: upstream now
+    provides the c++2d standard mode natively.
+  - DiagnosticLexKinds.td: the #depend extension diagnostic joins upstream's
+    existing CXX29 diagnostic group (was CXX2D).
   - ResourceSearch.cpp / DependencyFile.cpp track the current FileManager and
     DependencyCollector signatures.
 
-Original work by Bjorkus "ThePhD" Dorkus; see the embed repository.
+Constant-evaluator (__builtin_std_embed) fixes:
+  - offset + limit: read exactly the [offset, offset + size) window instead of
+    'limit' bytes from the start; the previous code sliced at DataOffset into a
+    buffer that only held the first 'limit' bytes, reading out of bounds (and
+    tripping the buffer-size assert) whenever the window ran past the limit.
+  - a failed 'limit' evaluation reported the offset argument; report the limit.
+  - diagnose instead of asserting-then-dereferencing a null
+    InputDependencyPatterns (an ICE if the builtin is reached without the
+    dependency machinery).
+  - drop a dead std::max<size_t>(0, ...) and fix a stale comment.
+
+Original clang work by Bjorkus "ThePhD" Dorkus; rebase and evaluator fixes in
+this revision.
 ---
  clang/include/clang/AST/ASTContext.h          |   15 +
  clang/include/clang/AST/DeclCXX.h             |    4 +-
@@ -32,7 +43,7 @@ Original work by Bjorkus "ThePhD" Dorkus; see the embed repository.
  clang/lib/AST/ASTImporter.cpp                 |    3 +-
  clang/lib/AST/ByteCode/Compiler.cpp           |    2 +-
  clang/lib/AST/Expr.cpp                        |   17 +-
- clang/lib/AST/ExprConstant.cpp                |  366 ++-
+ clang/lib/AST/ExprConstant.cpp                |  379 ++-
  clang/lib/AST/StmtPrinter.cpp                 |    9 +-
  clang/lib/Basic/CMakeLists.txt                |    2 +
  clang/lib/Basic/IdentifierTable.cpp           |    1 +
@@ -155,7 +166,7 @@ Original work by Bjorkus "ThePhD" Dorkus; see the embed repository.
  .../vector.version.compile.pass.cpp           |   61 +-
  .../version.version.compile.pass.cpp          | 2063 ++++++++++++++++-
  .../generate_feature_test_macro_components.py |   10 +-
- 141 files changed, 7598 insertions(+), 262 deletions(-)
+ 141 files changed, 7611 insertions(+), 262 deletions(-)
  create mode 100644 clang/include/clang/Basic/InputDependencyCollection.h
  create mode 100644 clang/include/clang/Basic/ResourceSearch.h
  create mode 100644 clang/lib/Basic/InputDependencyCollection.cpp
@@ -790,7 +801,7 @@ index 0bb9c6aa0..9ad5f3c44 100644
    // If we are currently parsing a lambda declarator, we might not have a fully
    // formed call operator declaration yet, and we could not form a function name
 diff --git a/clang/lib/AST/ExprConstant.cpp b/clang/lib/AST/ExprConstant.cpp
-index 25a96a9c3..7ea69a005 100644
+index 25a96a9c3..e403f70fa 100644
 --- a/clang/lib/AST/ExprConstant.cpp
 +++ b/clang/lib/AST/ExprConstant.cpp
 @@ -53,13 +53,18 @@
@@ -880,7 +891,7 @@ index 25a96a9c3..7ea69a005 100644
      Result.setFrom(Info.Ctx, LValResult);
      return true;
    }
-@@ -10804,7 +10842,324 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
+@@ -10804,7 +10842,337 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
          return false;
      }
    }
@@ -1056,7 +1067,7 @@ index 25a96a9c3..7ea69a005 100644
 +    if (LimitArg) {
 +      APSInt LimitVal;
 +      if (!EvaluateInteger(LimitArg, LimitVal, Info)) {
-+        return Error(OffsetArg);
++        return Error(LimitArg);
 +      }
 +      if (LimitVal.getBitWidth() > 64) {
 +        Info.FFDiag(LimitArg->getBeginLoc(), diag::err_ice_too_large)
@@ -1119,9 +1130,16 @@ index 25a96a9c3..7ea69a005 100644
 +      return WriteOutStatus(FileNotFound);
 +    }
 +    FileEntryRef ResourceFileEntry = *ResourceFile;
-+    assert(Info.Ctx.InputDependencyPatterns &&
-+           "using __builtin_std_embed requires the context to have a usable "
-+           "input dependency patterns");
++    // The dependency-pattern machinery is set up by the frontend when embed
++    // support is enabled; if it is somehow absent, diagnose instead of
++    // dereferencing a null pointer below (which would crash the compiler).
++    if (!Info.Ctx.InputDependencyPatterns) {
++      Info.FFDiag(ResourceNamePtrArg->getBeginLoc(), diag::err_cannot_open_file)
++          << ResourceName
++          << "the resource-dependency machinery is unavailable in this "
++             "compilation";
++      return false;
++    }
 +    StringRef ResourceSearchName =
 +        ResourceFileEntry.getFileEntry().tryGetRealPathName();
 +    if (ResourceSearchName.empty()) {
@@ -1137,16 +1155,22 @@ index 25a96a9c3..7ea69a005 100644
 +      Result.setNull(Info.Ctx, PtrOutTy);
 +      return WriteOutSize(0) && WriteOutStatus(FileFoundAndEmpty);
 +    }
-+    DataSize = std::max<size_t>(
-+        0, std::min<size_t>(FullDataSize - DataOffset,
-+                            MaybeLimit ? *MaybeLimit
-+                                       : std::numeric_limits<size_t>::max()));
++    DataSize = std::min<size_t>(FullDataSize - DataOffset,
++                                MaybeLimit ? *MaybeLimit
++                                           : std::numeric_limits<size_t>::max());
 +    if (DataSize == 0) {
 +      Result.setNull(Info.Ctx, PtrOutTy);
 +      return WriteOutSize(0) && WriteOutStatus(FileFoundAndEmpty);
 +    }
++    // Read exactly enough of the file to cover the requested
++    // [DataOffset, DataOffset + DataSize) window. The buffer size hint is the
++    // number of bytes to read from the start, so it must account for the
++    // offset - passing the bare limit here would read too little and make the
++    // DataOffset slice below read out of bounds (and disagree with the size we
++    // already reported). DataOffset + DataSize is guaranteed <= FullDataSize.
++    const int64_t BytesToRead = static_cast<int64_t>(DataOffset + DataSize);
 +    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> MaybeBinaryData =
-+        FM.getBufferForFile(*ResourceFile, true, false, MaybeLimit, false);
++        FM.getBufferForFile(*ResourceFile, true, false, BytesToRead, false);
 +    if (auto Err = MaybeBinaryData.getError()) {
 +      std::string ExtraMessage = Err.message();
 +      std::string ErrorMessage = "could not open the resource";
@@ -1165,9 +1189,9 @@ index 25a96a9c3..7ea69a005 100644
 +          << "found the resource but unable to read the binary data";
 +      return false;
 +    }
-+    assert(BinaryData->getBufferSize() == FullDataSize &&
-+           "The binary data for some reason has a data size that is different "
-+           "from the retrieved file size earlier");
++    assert(BinaryData->getBufferSize() >= DataOffset + DataSize &&
++           "the resource buffer does not cover the requested "
++           "[offset, offset + size) window");
 +
 +    // Write out size
 +    LValue SizeOutLVal;
@@ -1205,7 +1229,7 @@ index 25a96a9c3..7ea69a005 100644
    default:
      return false;
    }
-@@ -15754,7 +16109,8 @@ public:
+@@ -15754,7 +16122,8 @@ public:
    bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
      assert(E->getType()->isIntegralOrEnumerationType() &&
             "Invalid evaluation result.");
@@ -2079,7 +2103,7 @@ index 74209f579..804b28e5e 100644
    }
    }
 diff --git a/clang/lib/Sema/SemaChecking.cpp b/clang/lib/Sema/SemaChecking.cpp
-index 2a8395e26..d014d6d4a 100644
+index 2a8395e26..b1841b777 100644
 --- a/clang/lib/Sema/SemaChecking.cpp
 +++ b/clang/lib/Sema/SemaChecking.cpp
 @@ -4103,6 +4103,13 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
@@ -2214,7 +2238,7 @@ index 2a8395e26..d014d6d4a 100644
 +  }
 +
 +  if (HasExtraLimitArg) {
-+    // If present, final argument is offset
++    // If present, the final argument is the read limit
 +    QualType LimitTy = Limit->getType();
 +    if (!LimitTy->isIntegralOrEnumerationType()) {
 +      Diag(TheCall->getBeginLoc(),
