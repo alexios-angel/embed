@@ -11,10 +11,21 @@ These scripts build the patched clang (with `__builtin_std_embed` / full
 | macOS arm64/x86_64| native on a Mac (Apple SDK required)             | `build.sh native` or `build.sh macos-universal` |
 
 All of the above are also built natively in CI by
-[`.github/workflows/build-clang.yml`](../../.github/workflows/build-clang.yml)
-(manual trigger: *Actions → build-clang-std-embed → Run workflow*), which
-uploads a toolchain archive per platform. That is the easiest way to cover
-every platform at once — native builds avoid all cross-compilation caveats.
+[`.github/workflows/build-clang.yml`](../../.github/workflows/build-clang.yml),
+which produces a toolchain archive per platform. That is the easiest way to
+cover every platform at once — native builds avoid all cross-compilation
+caveats.
+
+To publish the toolchains on the repository's **Releases** page, either:
+
+- push a tag matching `clang-std-embed-*`
+  (`git tag clang-std-embed-v1 && git push origin clang-std-embed-v1`), or
+- trigger manually (*Actions → build-clang-std-embed → Run workflow*) and fill
+  in the `release_tag` input.
+
+The `release` job then creates (or updates) that GitHub release and attaches
+every platform archive that built successfully. Triggering manually with an
+empty `release_tag` builds everything but only stores workflow artifacts.
 
 ## Source layout
 

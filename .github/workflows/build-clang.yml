@@ -1,9 +1,17 @@
 name: build-clang-std-embed
 
 # Full LLVM builds are expensive (~2-4 h per platform on hosted runners),
-# so this only runs on demand.
+# so this only runs on demand: manually (optionally publishing a release),
+# or by pushing a clang-std-embed-* tag.
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish the toolchains to a GitHub release with this tag (created if missing). Leave empty for artifacts only."
+        required: false
+        default: ""
+  push:
+    tags: ["clang-std-embed-*"]
 
 env:
   # Upstream llvm/llvm-project commit the std::embed patch is based on.
@@ -82,3 +90,37 @@ jobs:
           name: clang-std-embed-windows-x86_64-msvc
           path: dist/*.zip
           if-no-files-found: error
+
+  release:
+    # Publish whatever platforms built successfully to the Releases page.
+    needs: [unix, windows-msvc]
+    if: >-
+      !cancelled() &&
+      (needs.unix.result == 'success' || needs.windows-msvc.result == 'success') &&
+      (github.ref_type == 'tag' || inputs.release_tag != '')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="${{ inputs.release_tag }}"
+          fi
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "std::embed clang toolchain $TAG" \
+              --notes "Prebuilt clang/LLVM toolchains with the full std::embed and #depend implementation (patches/0002, based on llvm/llvm-project $LLVM_BASE). Unpack and use bin/clang++."
+          fi
+          gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
