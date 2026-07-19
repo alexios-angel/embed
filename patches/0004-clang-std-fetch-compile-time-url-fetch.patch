@@ -1,0 +1,755 @@
+From e6e2671506de0eb7b3ef827f9deef967141f5315 Mon Sep 17 00:00:00 2001
+From: Alex Angel <aangeletakis@gmail.com>
+Date: Sun, 19 Jul 2026 00:05:25 -0400
+Subject: [PATCH] =?UTF-8?q?[clang]=20std::fetch:=20=5F=5Fbuiltin=5Fstd=5Ff?=
+ =?UTF-8?q?etch=20=E2=80=94=20compile-time=20URL=20fetch-and-embed?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+std::embed's sibling: given a URL, perform an HTTP(S) GET DURING CONSTANT
+EVALUATION and embed the response bytes into the binary, the same way
+__builtin_std_embed embeds a file.
+
+- Builtins.td StdFetch (Consteval, variadic); Sema BuiltinStdFetch mirrors
+  BuiltinStdEmbed's arg inspection (locus, status&, size&, ptr&, url_size,
+  url_ptr) plus an optional trailing (hash_size, hash_ptr) pair for a
+  content-hash pin; result type = the pointer arg type.
+- ExprConstant.cpp BI__builtin_std_fetch reuses embed's string
+  reconstruction and StringLiteral::Create/addArray byte materialization;
+  the middle is replaced by: (a) an allow-list check, (b) an
+  llvm::HTTPClient GET into an owned buffer, (c) optional SHA-256 verify.
+  Status codes Ok/NotAuthorized/FetchFailed/Empty/HashMismatch, written to
+  the caller's int& like embed's FileFoundButNotDependedOn. No caching:
+  every build fetches.
+- Authorization: --fetch-allow=<url-glob> (Options.td, CompilerInvocation,
+  driver forward) feeds clang/Basic/FetchAllowList (URL glob -> regex; *
+  within a path segment, ** across '/'). Un-allowed URL -> NotAuthorized.
+- Networking: the in-tree llvm::HTTPClient (LLVMHTTP, curl/WinHTTP, HTTPS,
+  redirects) - no foreign dependency. Linked into clangAST + the clang
+  tool; HTTPClient::initialize() runs once in cc1_main before threads.
+  isAvailable()/IsInitialized gate a clean diagnostic when built w/o curl.
+- build.sh: -DLLVM_ENABLE_CURL=ON.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ clang/include/clang/Basic/Builtins.td         |  10 +
+ .../clang/Basic/DiagnosticCommonKinds.td      |   1 +
+ .../clang/Basic/DiagnosticSemaKinds.td        |   4 +
+ clang/include/clang/Basic/FetchAllowList.h    |  54 +++++
+ clang/include/clang/Lex/PreprocessorOptions.h |   3 +
+ clang/include/clang/Options/Options.td        |   4 +
+ clang/include/clang/Sema/Sema.h               |   1 +
+ clang/lib/AST/CMakeLists.txt                  |   4 +
+ clang/lib/AST/ExprConstant.cpp                | 211 ++++++++++++++++++
+ clang/lib/Basic/CMakeLists.txt                |   1 +
+ clang/lib/Basic/FetchAllowList.cpp            |  49 ++++
+ clang/lib/Driver/ToolChains/Clang.cpp         |   1 +
+ clang/lib/Frontend/CompilerInvocation.cpp     |   6 +
+ clang/lib/Sema/SemaChecking.cpp               | 133 +++++++++++
+ clang/tools/driver/CMakeLists.txt             |   4 +
+ clang/tools/driver/cc1_main.cpp               |   6 +
+ 16 files changed, 492 insertions(+)
+ create mode 100644 clang/include/clang/Basic/FetchAllowList.h
+ create mode 100644 clang/lib/Basic/FetchAllowList.cpp
+
+diff --git a/clang/include/clang/Basic/Builtins.td b/clang/include/clang/Basic/Builtins.td
+index 5455d6fab..e17be782a 100644
+--- a/clang/include/clang/Basic/Builtins.td
++++ b/clang/include/clang/Basic/Builtins.td
+@@ -1226,6 +1226,16 @@ def StdEmbed : Builtin {
+   let Prototype = "void const*(unsigned int, int&, size_t&, ...)";
+ }
+ 
++// std::fetch - std::embed's sibling: fetch a URL over HTTP(S) at
++// compile time and embed the response bytes. Same variadic/Consteval
++// shape as StdEmbed; the byte source is the network, gated by an
++// allow-list and an optional content-hash pin.
++def StdFetch : Builtin {
++  let Spellings = ["__builtin_std_fetch"];
++  let Attributes = [NoThrow, Const, Consteval];
++  let Prototype = "void const*(unsigned int, int&, size_t&, ...)";
++}
++
+ // GCC exception builtins
+ def EHReturn : Builtin {
+   let Spellings = ["__builtin_eh_return"];
+diff --git a/clang/include/clang/Basic/DiagnosticCommonKinds.td b/clang/include/clang/Basic/DiagnosticCommonKinds.td
+index f2ed2f469..a98d06d17 100644
+--- a/clang/include/clang/Basic/DiagnosticCommonKinds.td
++++ b/clang/include/clang/Basic/DiagnosticCommonKinds.td
+@@ -393,6 +393,7 @@ def err_musttail_noexcept_mismatch: Error<
+ 
+ // Source manager
+ def err_cannot_open_file : Error<"cannot open file '%0': %1">, DefaultFatal;
++def err_cannot_fetch_url : Error<"cannot fetch URL '%0': %1">, DefaultFatal;
+ def err_file_modified : Error<
+   "file '%0' modified since it was first processed">, DefaultFatal;
+ def err_file_too_large : Error<
+diff --git a/clang/include/clang/Basic/DiagnosticSemaKinds.td b/clang/include/clang/Basic/DiagnosticSemaKinds.td
+index ed8cb6637..629681b1f 100644
+--- a/clang/include/clang/Basic/DiagnosticSemaKinds.td
++++ b/clang/include/clang/Basic/DiagnosticSemaKinds.td
+@@ -862,6 +862,10 @@ def err_invalid_builtin_argument : Error<"invalid argument '%0' to %1">;
+ def err_invalid_builtin_std_embed_argument : Error<
+   "invalid argument to '__builtin_std_embed': %0 should be %1">;
+ 
++/// __builtin_std_fetch type checking errors
++def err_invalid_builtin_std_fetch_argument : Error<
++  "invalid argument to '__builtin_std_fetch': %0 should be %1">;
++
+ 
+ def err_arm_invalid_specialreg : Error<"invalid special register for builtin">;
+ def err_arm_invalid_coproc : Error<"coprocessor %0 must be configured as "
+diff --git a/clang/include/clang/Basic/FetchAllowList.h b/clang/include/clang/Basic/FetchAllowList.h
+new file mode 100644
+index 000000000..15036e1e4
+--- /dev/null
++++ b/clang/include/clang/Basic/FetchAllowList.h
+@@ -0,0 +1,54 @@
++//===--- FetchAllowList.h - Authorized URLs for std::fetch ------*- C++ -*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++//
++// The authorization gate for __builtin_std_fetch: fetching a URL over the
++// network at compile time is only permitted when the URL matches one of the
++// allow-list glob patterns supplied on the command line (--fetch-allow=) or
++// via a directive. This is the fetch analogue of the #depend file gate.
++//
++//===----------------------------------------------------------------------===//
++#ifndef LLVM_CLANG_BASIC_FETCHALLOWLIST_H
++#define LLVM_CLANG_BASIC_FETCHALLOWLIST_H
++
++#include "llvm/ADT/StringRef.h"
++#include "llvm/Support/Regex.h"
++#include <string>
++#include <vector>
++
++namespace clang {
++
++/// One allow-list URL glob compiled to a regex. Glob semantics: `*`
++/// matches any run of characters except '/', `**` matches any run
++/// including '/', and every other character is matched literally. A
++/// pattern with no wildcard authorizes exactly that URL (prefix, if it
++/// ends in '/').
++struct FetchPattern {
++  std::string Glob;
++  llvm::Regex PatternRegex;
++
++  explicit FetchPattern(std::string Glob);
++  bool matches(llvm::StringRef Url) const;
++};
++
++/// The set of authorized URL patterns for this compilation.
++class FetchAllowList {
++  std::vector<FetchPattern> Patterns;
++
++public:
++  FetchAllowList() = default;
++
++  void add(std::string Glob) { Patterns.emplace_back(std::move(Glob)); }
++  bool empty() const { return Patterns.empty(); }
++
++  /// Is \p Url authorized to be fetched at compile time?
++  bool isAllowed(llvm::StringRef Url) const;
++};
++
++} // namespace clang
++
++#endif
+diff --git a/clang/include/clang/Lex/PreprocessorOptions.h b/clang/include/clang/Lex/PreprocessorOptions.h
+index 4d1a30712..ce847c8a7 100644
+--- a/clang/include/clang/Lex/PreprocessorOptions.h
++++ b/clang/include/clang/Lex/PreprocessorOptions.h
+@@ -192,6 +192,9 @@ public:
+   /// User specified embed entries.
+   std::vector<std::string> EmbedEntries;
+ 
++  /// URL globs authorizing __builtin_std_fetch (--fetch-allow=).
++  std::vector<std::string> FetchAllowEntries;
++
+   /// Whether the compiler instance should retain (i.e., not free)
+   /// the buffers associated with remapped files.
+   ///
+diff --git a/clang/include/clang/Options/Options.td b/clang/include/clang/Options/Options.td
+index 77c93db00..9f3faef2d 100644
+--- a/clang/include/clang/Options/Options.td
++++ b/clang/include/clang/Options/Options.td
+@@ -806,6 +806,10 @@ def L : JoinedOrSeparate<["-"], "L">, Flags<[RenderJoined]>, Group<Link_Group>,
+ def embed_dir_EQ : Joined<["--"], "embed-dir=">, Group<Preprocessor_Group>,
+     Visibility<[ClangOption, CC1Option]>, MetaVarName<"<dir>">,
+     HelpText<"Add directory to embed search path">;
++def fetch_allow_EQ : Joined<["--"], "fetch-allow=">, Group<Preprocessor_Group>,
++    Visibility<[ClangOption, CC1Option]>, MetaVarName<"<url-glob>">,
++    HelpText<"Authorize __builtin_std_fetch to fetch URLs matching this glob "
++             "(* matches within a path segment, ** matches across '/')">;
+ def MD : Flag<["-"], "MD">, Group<M_Group>,
+     HelpText<"Write a depfile containing user and system headers">;
+ def MMD : Flag<["-"], "MMD">, Group<M_Group>,
+diff --git a/clang/include/clang/Sema/Sema.h b/clang/include/clang/Sema/Sema.h
+index a383ac809..efb17fcc6 100644
+--- a/clang/include/clang/Sema/Sema.h
++++ b/clang/include/clang/Sema/Sema.h
+@@ -3060,6 +3060,7 @@ private:
+                                        BuiltinCountedByRefKind K);
+   bool BuiltinCountedByRef(CallExpr *TheCall);
+   bool BuiltinStdEmbed(CallExpr *TheCall);
++  bool BuiltinStdFetch(CallExpr *TheCall);
+ 
+   // Matrix builtin handling.
+   ExprResult BuiltinMatrixTranspose(CallExpr *TheCall, ExprResult CallResult);
+diff --git a/clang/lib/AST/CMakeLists.txt b/clang/lib/AST/CMakeLists.txt
+index e3f74d73f..8ce000919 100644
+--- a/clang/lib/AST/CMakeLists.txt
++++ b/clang/lib/AST/CMakeLists.txt
+@@ -142,6 +142,10 @@ add_clang_library(clangAST
+   LINK_LIBS
+   clangBasic
+   clangLex
++  # __builtin_std_fetch performs an HTTP GET in the constant evaluator
++  # (ExprConstant.cpp) via llvm::HTTPClient. LLVMHTTP is not a component
++  # library, so it goes here rather than in LLVM_LINK_COMPONENTS.
++  LLVMHTTP
+ 
+   DEPENDS
+   ClangAttrDocTable
+diff --git a/clang/lib/AST/ExprConstant.cpp b/clang/lib/AST/ExprConstant.cpp
+index 39ee07362..59837cc15 100644
+--- a/clang/lib/AST/ExprConstant.cpp
++++ b/clang/lib/AST/ExprConstant.cpp
+@@ -54,6 +54,7 @@
+ #include "clang/Basic/Builtins.h"
+ #include "clang/Basic/DiagnosticSema.h"
+ #include "clang/Basic/FileManager.h"
++#include "clang/Basic/FetchAllowList.h"
+ #include "clang/Basic/ResourceSearch.h"
+ #include "clang/Basic/SourceManager.h"
+ #include "clang/Basic/TargetBuiltins.h"
+@@ -63,10 +64,13 @@
+ #include "llvm/ADT/Sequence.h"
+ #include "llvm/ADT/SmallBitVector.h"
+ #include "llvm/ADT/StringExtras.h"
++#include "llvm/Config/llvm-config.h"
++#include "llvm/HTTP/HTTPClient.h"
+ #include "llvm/Support/Casting.h"
+ #include "llvm/Support/ConvertUTF.h"
+ #include "llvm/Support/Debug.h"
+ #include "llvm/Support/SaveAndRestore.h"
++#include "llvm/Support/SHA256.h"
+ #include "llvm/Support/SipHash.h"
+ #include "llvm/Support/TimeProfiler.h"
+ #include "llvm/Support/raw_ostream.h"
+@@ -11184,6 +11188,213 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
+     Result.addArray(Info, E, BackingArrayConstantArrayTy);
+     return WriteOutStatus(FileFound);
+   }
++  case Builtin::BI__builtin_std_fetch: {
++    // __builtin_std_fetch is __builtin_std_embed's sibling: it fetches a
++    // URL over HTTP(S) DURING CONSTANT EVALUATION and embeds the response
++    // bytes. It reuses embed's string-reconstruction and byte-array
++    // materialization; the middle (file lookup + read) is replaced by an
++    // allow-list check, an HTTPClient GET, and an optional content-hash
++    // pin. There is no caching: every build performs the fetch.
++    constexpr uint64_t Ok = 1;
++    constexpr uint64_t NotAuthorized = 2;
++    constexpr uint64_t FetchFailed = 3;
++    constexpr uint64_t Empty = 4;
++    constexpr uint64_t HashMismatch = 5;
++
++    const Expr *LocusArg = E->getArg(0);
++    const Expr *StatusOutArg = E->getArg(1);
++    const Expr *SizeOutArg = E->getArg(2);
++    const Expr *PtrOutArg = E->getArg(3);
++    const Expr *UrlSizeArg = E->getArg(4);
++    const Expr *UrlPtrArg = E->getArg(5);
++    const bool HasHash = E->getNumArgs() == 8;
++    const Expr *HashSizeArg = HasHash ? E->getArg(6) : nullptr;
++    const Expr *HashPtrArg = HasHash ? E->getArg(7) : nullptr;
++    (void)LocusArg; // a URL is absolute; no quoted-search anchor to honor
++
++    QualType PtrOutTy = PtrOutArg->getType();
++    QualType ArrElementTy = PtrOutTy->getPointeeType();
++
++    const size_t SizeTySize = Info.Ctx.getTypeSize(Info.Ctx.getSizeType());
++    const size_t IntTySize = Info.Ctx.getTypeSize(Info.Ctx.IntTy);
++    const size_t WCharTySize = Info.Ctx.getTypeSize(Info.Ctx.getWideCharType());
++
++    // Reconstruct a compile-time string pointer argument into `Out`,
++    // transcoding wide chars to UTF-8 exactly as __builtin_std_embed does.
++    auto ReadString = [&](const Expr *SizeArg, const Expr *PtrArg,
++                          std::string &Out) -> bool {
++      LValue PtrLVal;
++      if (!EvaluatePointer(PtrArg, PtrLVal, Info))
++        return Error(PtrArg);
++      APSInt SizeVal;
++      if (!EvaluateInteger(SizeArg, SizeVal, Info))
++        return Error(SizeArg);
++      if (SizeVal.getBitWidth() > 64) {
++        Info.FFDiag(SizeArg->getBeginLoc(), diag::err_ice_too_large)
++            << SizeArg << 64 << 1;
++        return false;
++      }
++      uint64_t Size = SizeVal.getZExtValue();
++      const QualType CharTy(PtrArg->getType()->getPointeeOrArrayElementType(),
++                            0);
++      if (CharTy->isChar8Type() || CharTy->isCharType() ||
++          (CharTy->isWideCharType() && WCharTySize == 8)) {
++        for (uint64_t I = 0; I < Size; ++I) {
++          APValue Char;
++          if (!handleLValueToRValueConversion(Info, PtrArg, CharTy, PtrLVal,
++                                              Char))
++            return Error(PtrArg);
++          Out.push_back(static_cast<char>(
++              static_cast<unsigned char>(Char.getInt().getExtValue())));
++          if (!HandleLValueArrayAdjustment(Info, PtrArg, PtrLVal, CharTy, 1))
++            return Error(PtrArg);
++        }
++      } else if (CharTy->isWideCharType() && WCharTySize == 16) {
++        llvm::SmallVector<llvm::UTF16, 64> U16;
++        for (uint64_t I = 0; I < Size; ++I) {
++          APValue Char;
++          if (!handleLValueToRValueConversion(Info, PtrArg, CharTy, PtrLVal,
++                                              Char))
++            return Error(PtrArg);
++          U16.push_back(static_cast<llvm::UTF16>(Char.getInt().getExtValue()));
++          if (!HandleLValueArrayAdjustment(Info, PtrArg, PtrLVal, CharTy, 1))
++            return Error(PtrArg);
++        }
++        if (!llvm::convertUTF16ToUTF8String(U16, Out))
++          return Error(PtrArg);
++      } else if (CharTy->isWideCharType() && WCharTySize == 32) {
++        llvm::SmallVector<llvm::UTF32, 64> U32;
++        for (uint64_t I = 0; I < Size; ++I) {
++          APValue Char;
++          if (!handleLValueToRValueConversion(Info, PtrArg, CharTy, PtrLVal,
++                                              Char))
++            return Error(PtrArg);
++          U32.push_back(static_cast<llvm::UTF32>(Char.getInt().getExtValue()));
++          if (!HandleLValueArrayAdjustment(Info, PtrArg, PtrLVal, CharTy, 1))
++            return Error(PtrArg);
++        }
++        if (!llvm::convertUTF32ToUTF8String(U32, Out))
++          return Error(PtrArg);
++      } else {
++        return Error(PtrArg);
++      }
++      return true;
++    };
++
++    std::string Url;
++    if (!ReadString(UrlSizeArg, UrlPtrArg, Url))
++      return false;
++    std::string ExpectedHash;
++    if (HasHash && !ReadString(HashSizeArg, HashPtrArg, ExpectedHash))
++      return false;
++
++    auto WriteOutStatus = [&](uint64_t Status) -> bool {
++      LValue StatusOutLVal;
++      if (!EvaluateLValue(StatusOutArg, StatusOutLVal, Info))
++        return Error(StatusOutArg);
++      APSInt StatusVal(llvm::APInt(IntTySize, Status, true), false);
++      APValue StatusOutResult(StatusVal);
++      return handleAssignment(Info, StatusOutArg, StatusOutLVal,
++                              StatusOutArg->getType(), StatusOutResult) ||
++             Error(StatusOutArg);
++    };
++    auto WriteOutSize = [&](uint64_t Size) -> bool {
++      LValue SizeOutLVal;
++      if (!EvaluateLValue(SizeOutArg, SizeOutLVal, Info))
++        return Error(SizeOutArg);
++      APSInt SizeVal(llvm::APInt(SizeTySize, Size, false), true);
++      APValue SizeOutResult(SizeVal);
++      return handleAssignment(Info, SizeOutArg, SizeOutLVal,
++                              SizeOutArg->getType(), SizeOutResult) ||
++             Error(SizeOutArg);
++    };
++
++    // Authorization gate: the URL must match a --fetch-allow glob.
++    PreprocessorOptions const *PPOpts =
++        Info.Ctx.getCurrentPreprocessorOptions();
++    FetchAllowList Allow;
++    if (PPOpts)
++      for (const std::string &Glob : PPOpts->FetchAllowEntries)
++        Allow.add(Glob);
++    if (!Allow.isAllowed(Url)) {
++      Result.setNull(Info.Ctx, PtrOutTy);
++      return WriteOutStatus(NotAuthorized);
++    }
++
++    // Perform the GET. isAvailable() is false when this clang was built
++    // without curl (non-Windows); degrade with a clear diagnostic rather
++    // than crashing in the stub's llvm_unreachable.
++    if (!llvm::HTTPClient::isAvailable()) {
++      Info.FFDiag(UrlPtrArg->getBeginLoc(), diag::err_cannot_fetch_url)
++          << Url << "this clang was built without network (curl) support";
++      return false;
++    }
++    if (!llvm::HTTPClient::IsInitialized) {
++      Info.FFDiag(UrlPtrArg->getBeginLoc(), diag::err_cannot_fetch_url)
++          << Url << "the HTTP client was not initialized in this compilation";
++      return false;
++    }
++
++    std::string Body;
++    struct BufferHandler : llvm::HTTPResponseHandler {
++      std::string &Out;
++      explicit BufferHandler(std::string &O) : Out(O) {}
++      llvm::Error handleBodyChunk(llvm::StringRef Chunk) override {
++        Out.append(Chunk.begin(), Chunk.end());
++        return llvm::Error::success();
++      }
++    } Handler(Body);
++
++    llvm::HTTPClient Client;
++    llvm::HTTPRequest Request(Url);
++    if (llvm::Error Err = Client.perform(Request, Handler)) {
++      Info.FFDiag(UrlPtrArg->getBeginLoc(), diag::err_cannot_fetch_url)
++          << Url << llvm::toString(std::move(Err));
++      return false;
++    }
++    unsigned Code = Client.responseCode();
++    if (Code && Code != 200) {
++      Result.setNull(Info.Ctx, PtrOutTy);
++      return WriteOutStatus(FetchFailed);
++    }
++
++    // Optional content-hash pin (lowercase hex SHA-256) for reproducibility.
++    if (HasHash && !ExpectedHash.empty()) {
++      llvm::SHA256 Hasher;
++      Hasher.update(llvm::StringRef(Body));
++      std::string Got = llvm::toHex(Hasher.final(), /*LowerCase=*/true);
++      if (!llvm::StringRef(Got).equals_insensitive(ExpectedHash)) {
++        Result.setNull(Info.Ctx, PtrOutTy);
++        return WriteOutStatus(HashMismatch);
++      }
++    }
++
++    if (Body.empty()) {
++      Result.setNull(Info.Ctx, PtrOutTy);
++      return WriteOutSize(0) && WriteOutStatus(Empty);
++    }
++
++    const uint64_t DataSize = Body.size();
++    if (!WriteOutSize(DataSize))
++      return false;
++
++    // Materialize the fetched bytes as a binary StringLiteral (Create
++    // copies into the ASTContext, so the local Body may die afterward).
++    SourceLocation BuiltinLoc = E->getBeginLoc();
++    APSInt SizeAP(llvm::APInt(SizeTySize, DataSize, false), true);
++    StringRef TargetData(Body.data(), DataSize);
++    QualType BackingArrayTy = Info.Ctx.getConstantArrayType(
++        ArrElementTy, SizeAP, nullptr, ArraySizeModifier::Normal, 0);
++    const ConstantArrayType *BackingArrayConstantArrayTy =
++        cast<ConstantArrayType>(BackingArrayTy);
++    StringLiteral *DataLiteral = StringLiteral::Create(
++        Info.Ctx, TargetData, StringLiteralKind::Binary, false, BackingArrayTy,
++        ArrayRef<SourceLocation>(&BuiltinLoc, 1));
++    if (!EvaluateLValue(DataLiteral, Result, Info))
++      return Error(E);
++    Result.addArray(Info, E, BackingArrayConstantArrayTy);
++    return WriteOutStatus(Ok);
++  }
+   default:
+     return false;
+   }
+diff --git a/clang/lib/Basic/CMakeLists.txt b/clang/lib/Basic/CMakeLists.txt
+index bdf84fb86..bd6e19562 100644
+--- a/clang/lib/Basic/CMakeLists.txt
++++ b/clang/lib/Basic/CMakeLists.txt
+@@ -71,6 +71,7 @@ add_clang_library(clangBasic
+   FileEntry.cpp
+   FileManager.cpp
+   IdentifierTable.cpp
++  FetchAllowList.cpp
+   InputDependencyCollection.cpp
+   LangOptions.cpp
+   LangStandards.cpp
+diff --git a/clang/lib/Basic/FetchAllowList.cpp b/clang/lib/Basic/FetchAllowList.cpp
+new file mode 100644
+index 000000000..ea1a94b3b
+--- /dev/null
++++ b/clang/lib/Basic/FetchAllowList.cpp
+@@ -0,0 +1,49 @@
++//===--- FetchAllowList.cpp - Authorized URLs for std::fetch --------------===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++#include "clang/Basic/FetchAllowList.h"
++
++using namespace clang;
++
++// Compile a URL glob into an anchored regex. `**` -> ".*", `*` ->
++// "[^/]*", everything else is regex-escaped so it matches literally.
++static std::string globToRegex(llvm::StringRef Glob) {
++  std::string Re = "^";
++  for (size_t I = 0, N = Glob.size(); I < N; ++I) {
++    const char C = Glob[I];
++    if (C == '*') {
++      if (I + 1 < N && Glob[I + 1] == '*') {
++        Re += ".*";
++        ++I;
++      } else {
++        Re += "[^/]*";
++      }
++      continue;
++    }
++    // escape regex metacharacters so URL punctuation is literal
++    if (llvm::StringRef(".^$|()[]{}+?\\").contains(C))
++      Re += '\\';
++    Re += C;
++  }
++  Re += "$";
++  return Re;
++}
++
++FetchPattern::FetchPattern(std::string Glob)
++    : Glob(std::move(Glob)), PatternRegex(globToRegex(this->Glob)) {}
++
++bool FetchPattern::matches(llvm::StringRef Url) const {
++  return PatternRegex.isValid() && PatternRegex.match(Url);
++}
++
++bool FetchAllowList::isAllowed(llvm::StringRef Url) const {
++  for (const FetchPattern &P : Patterns)
++    if (P.matches(Url))
++      return true;
++  return false;
++}
+diff --git a/clang/lib/Driver/ToolChains/Clang.cpp b/clang/lib/Driver/ToolChains/Clang.cpp
+index 961906e02..ce0f5c9a9 100644
+--- a/clang/lib/Driver/ToolChains/Clang.cpp
++++ b/clang/lib/Driver/ToolChains/Clang.cpp
+@@ -9242,6 +9242,7 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
+ 
+   // Pass along any --embed-dir or similar options so we get proper embed paths.
+   Args.AddAllArgs(CmdArgs, options::OPT_embed_dir_EQ);
++  Args.AddAllArgs(CmdArgs, options::OPT_fetch_allow_EQ);
+ 
+   // Determine the original source input.
+   auto FindSource = [](const Action *S) -> const Action * {
+diff --git a/clang/lib/Frontend/CompilerInvocation.cpp b/clang/lib/Frontend/CompilerInvocation.cpp
+index 6545307a8..39e4bf87c 100644
+--- a/clang/lib/Frontend/CompilerInvocation.cpp
++++ b/clang/lib/Frontend/CompilerInvocation.cpp
+@@ -4883,6 +4883,9 @@ static void GeneratePreprocessorArgs(const PreprocessorOptions &Opts,
+   for (const auto &EmbedEntry : Opts.EmbedEntries)
+     GenerateArg(Consumer, OPT_embed_dir_EQ, EmbedEntry);
+ 
++  for (const auto &FetchEntry : Opts.FetchAllowEntries)
++    GenerateArg(Consumer, OPT_fetch_allow_EQ, FetchEntry);
++
+   // Don't handle LexEditorPlaceholders. It is implied by the action that is
+   // generated elsewhere.
+ }
+@@ -4969,6 +4972,9 @@ static bool ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
+     Opts.EmbedEntries.push_back(std::string(Val));
+   }
+ 
++  for (const auto *A : Args.filtered(OPT_fetch_allow_EQ))
++    Opts.FetchAllowEntries.push_back(std::string(A->getValue()));
++
+   // Always avoid lexing editor placeholders when we're just running the
+   // preprocessor as we never want to emit the
+   // "editor placeholder in source file" error in PP only mode.
+diff --git a/clang/lib/Sema/SemaChecking.cpp b/clang/lib/Sema/SemaChecking.cpp
+index b1841b777..1a3ba2819 100644
+--- a/clang/lib/Sema/SemaChecking.cpp
++++ b/clang/lib/Sema/SemaChecking.cpp
+@@ -4110,6 +4110,11 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
+     if (BuiltinStdEmbed(TheCall))
+       return ExprError();
+     break;
++  case Builtin::BI__builtin_std_fetch:
++    // same variadic shape as __builtin_std_embed; inspect the args
++    if (BuiltinStdFetch(TheCall))
++      return ExprError();
++    break;
+   }
+ 
+   if (getLangOpts().HLSL && HLSL().CheckBuiltinFunctionCall(BuiltinID, TheCall))
+@@ -7174,6 +7179,134 @@ bool Sema::BuiltinStdEmbed(CallExpr *TheCall) {
+   return false;
+ }
+ 
++// __builtin_std_fetch(locus, status&, size&, ptr&, url_size, url_ptr,
++//                     [hash_size, hash_ptr])
++// Mirrors BuiltinStdEmbed's argument inspection: the URL replaces the
++// resource name, and the optional trailing pair is an expected content
++// hash (hex string) for reproducibility pinning - not a file offset/limit.
++bool Sema::BuiltinStdFetch(CallExpr *TheCall) {
++  const bool HasProperArgCount = !checkArgCountAtLeast(TheCall, 6);
++  const bool HasHashArgs =
++      !checkArgCountAtMost(TheCall, 8) && TheCall->getNumArgs() == 8;
++  if (!HasProperArgCount)
++    return true;
++  // 7 args is ambiguous: the hash needs both size and pointer.
++  if (TheCall->getNumArgs() == 7) {
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << TheCall->getArg(6) << "either absent or a (size, pointer) pair"
++        << TheCall->getArg(6)->getSourceRange();
++    return true;
++  }
++
++  const Expr *Locus = TheCall->getArg(0);
++  const Expr *StatusRef = TheCall->getArg(1);
++  const Expr *SizeRef = TheCall->getArg(2);
++  const Expr *PtrRef = TheCall->getArg(3);
++  const Expr *UrlSize = TheCall->getArg(4);
++  const Expr *UrlPtr = TheCall->getArg(5);
++  const Expr *HashSize = HasHashArgs ? TheCall->getArg(6) : nullptr;
++  const Expr *HashPtr = HasHashArgs ? TheCall->getArg(7) : nullptr;
++  const uint64_t CharSize = Context.getCharWidth();
++
++  QualType LocusTy = Locus->getType();
++  if (!LocusTy->isIntegralOrUnscopedEnumerationType()) {
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << Locus << "an integral type with a non-negative value"
++        << Locus->getSourceRange();
++    return true;
++  }
++
++  QualType StatusRefTy = StatusRef->getType();
++  if ((!StatusRefTy->isIntegralOrUnscopedEnumerationType()) ||
++      StatusRefTy.isConstant(Context) || !StatusRef->isLValue()) {
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << StatusRef << "'int&'" << StatusRef->getSourceRange();
++    return true;
++  }
++
++  QualType SizeRefTy = SizeRef->getType();
++  if ((!SizeRefTy->isIntegralOrUnscopedEnumerationType()) ||
++      SizeRefTy.isConstant(Context) || !SizeRef->isLValue()) {
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << SizeRef << "'size_t&'" << SizeRef->getSourceRange();
++    return true;
++  }
++
++  // value pointer (pointer to const char-like); its type is the result type
++  QualType PtrRefTy = PtrRef->getType();
++  if (!PtrRefTy->isPointerType() || PtrRefTy.isConstant(Context)) {
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << PtrRefTy
++        << "a pointer to const 'char', 'unsigned char', or 'std::byte'"
++        << PtrRef->getSourceRange();
++    return true;
++  }
++  QualType ArrElementTy = PtrRefTy->getPointeeType();
++  if (!ArrElementTy.isConstant(Context) ||
++      !(Context.getTypeSize(ArrElementTy) == CharSize &&
++        Context.getTypeAlign(ArrElementTy) == CharSize &&
++        ArrElementTy->isIntegralOrEnumerationType())) {
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << PtrRefTy
++        << "a pointer to const 'char', 'unsigned char', or 'std::byte'"
++        << PtrRef->getSourceRange();
++    return true;
++  }
++
++  QualType UrlSizeTy = UrlSize->getType();
++  if (!UrlSizeTy->isIntegralOrEnumerationType()) {
++    Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << UrlSizeTy << "an integral type with a non-negative value"
++        << UrlSize->getSourceRange();
++    return true;
++  }
++
++  QualType UrlPtrTy = UrlPtr->getType();
++  if (!UrlPtrTy->isPointerType()) {
++    Diag(UrlPtr->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << UrlPtrTy
++        << "a pointer to (possibly qualified) 'char', 'wchar_t', or 'char8_t'"
++        << UrlPtr->getSourceRange();
++    return true;
++  }
++  QualType UrlCharTy(UrlPtrTy->getPointeeOrArrayElementType(), 0);
++  if (!UrlCharTy->isCharType() && !UrlCharTy->isChar8Type() &&
++      !UrlCharTy->isWideCharType()) {
++    Diag(UrlPtr->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++        << UrlPtrTy
++        << "a pointer to (possibly qualified) 'char', 'wchar_t', or 'char8_t'"
++        << UrlPtr->getSourceRange();
++    return true;
++  }
++
++  if (HasHashArgs) {
++    QualType HashSizeTy = HashSize->getType();
++    if (!HashSizeTy->isIntegralOrEnumerationType()) {
++      Diag(TheCall->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++          << HashSizeTy << "an integral type with a non-negative value"
++          << HashSize->getSourceRange();
++      return true;
++    }
++    QualType HashPtrTy = HashPtr->getType();
++    if (!HashPtrTy->isPointerType()) {
++      Diag(HashPtr->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++          << HashPtrTy << "a pointer to (possibly qualified) 'char'"
++          << HashPtr->getSourceRange();
++      return true;
++    }
++    QualType HashCharTy(HashPtrTy->getPointeeOrArrayElementType(), 0);
++    if (!HashCharTy->isCharType() && !HashCharTy->isChar8Type()) {
++      Diag(HashPtr->getBeginLoc(), diag::err_invalid_builtin_std_fetch_argument)
++          << HashPtrTy << "a pointer to (possibly qualified) 'char'"
++          << HashPtr->getSourceRange();
++      return true;
++    }
++  }
++
++  TheCall->setType(PtrRefTy);
++  return false;
++}
++
+ /// The result of __builtin_counted_by_ref cannot be assigned to a variable.
+ /// It allows leaking and modification of bounds safety information.
+ bool Sema::CheckInvalidBuiltinCountedByRef(const Expr *E,
+diff --git a/clang/tools/driver/CMakeLists.txt b/clang/tools/driver/CMakeLists.txt
+index 002aaef00..85e608c03 100644
+--- a/clang/tools/driver/CMakeLists.txt
++++ b/clang/tools/driver/CMakeLists.txt
+@@ -67,6 +67,10 @@ clang_target_link_libraries(clang
+   clangSerialization
+   )
+ 
++# cc1_main() calls llvm::HTTPClient::initialize() for __builtin_std_fetch;
++# LLVMHTTP is not an LLVM component, so link the target directly.
++target_link_libraries(clang PRIVATE LLVMHTTP)
++
+ if(WIN32 AND NOT CYGWIN)
+   # Prevent versioning if the buildhost is targeting for Win32.
+ else()
+diff --git a/clang/tools/driver/cc1_main.cpp b/clang/tools/driver/cc1_main.cpp
+index 89b0a340e..8baeb9051 100644
+--- a/clang/tools/driver/cc1_main.cpp
++++ b/clang/tools/driver/cc1_main.cpp
+@@ -30,6 +30,7 @@
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/ADT/StringExtras.h"
+ #include "llvm/Config/llvm-config.h"
++#include "llvm/HTTP/HTTPClient.h"
+ #include "llvm/LinkAllPasses.h"
+ #include "llvm/MC/MCSubtargetInfo.h"
+ #include "llvm/MC/TargetRegistry.h"
+@@ -232,6 +233,11 @@ int cc1_main(ArrayRef<const char *> Argv, const char *Argv0, void *MainAddr) {
+   llvm::InitializeAllAsmPrinters();
+   llvm::InitializeAllAsmParsers();
+ 
++  // __builtin_std_fetch performs HTTP GETs in the constant evaluator. curl's
++  // global init is not thread-safe, so it must run once here, before any
++  // worker threads spawn. No-op / stub when built without network support.
++  llvm::HTTPClient::initialize();
++
+   // Buffer diagnostics from argument parsing so that we can output them using a
+   // well formed diagnostic object.
+   DiagnosticOptions DiagOpts;
+-- 
+2.43.0
+

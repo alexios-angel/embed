@@ -1,0 +1,36 @@
+From 90683d09e54551b913c901bd322efa9e4de04c01 Mon Sep 17 00:00:00 2001
+From: Alex Angel <aangeletakis@gmail.com>
+Date: Sun, 19 Jul 2026 07:12:35 -0400
+Subject: [PATCH] [clang] std::fetch: forward --fetch-allow to the cc1 compile
+ job
+
+The flag was only forwarded in ClangAs::ConstructJob (the assembler job),
+so ordinary compiles dropped it with -Wunused-command-line-argument and
+every __builtin_std_fetch came back NotAuthorized against an empty
+allow-list. Forward it where --embed-dir= already goes:
+Clang::AddPreprocessingOptions, which feeds the real cc1 job.
+
+Caught by the fetch smoke test in the embed repo's remote build.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ clang/lib/Driver/ToolChains/Clang.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/clang/lib/Driver/ToolChains/Clang.cpp b/clang/lib/Driver/ToolChains/Clang.cpp
+index ce0f5c9a9..e03a6c445 100644
+--- a/clang/lib/Driver/ToolChains/Clang.cpp
++++ b/clang/lib/Driver/ToolChains/Clang.cpp
+@@ -1108,7 +1108,8 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
+ 
+   Args.addAllArgs(CmdArgs,
+                   {options::OPT_D, options::OPT_U, options::OPT_I_Group,
+-                   options::OPT_F, options::OPT_embed_dir_EQ});
++                   options::OPT_F, options::OPT_embed_dir_EQ,
++                   options::OPT_fetch_allow_EQ});
+ 
+   // Add -Wp, and -Xpreprocessor if using the preprocessor.
+ 
+-- 
+2.43.0
+

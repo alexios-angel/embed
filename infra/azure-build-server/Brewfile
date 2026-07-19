@@ -1,0 +1,12 @@
+# Build dependencies for the std::embed/std::fetch clang toolchain server.
+# Applied by remote-build-clang.sh on every run:
+#   HOMEBREW_NO_AUTO_UPDATE=1 brew bundle install --file=<this file>
+brew "cmake"
+brew "ninja"
+brew "ccache"
+brew "curl"   # LLVM_ENABLE_CURL -> __builtin_std_fetch
+brew "llvm"   # host compiler for building our clang
+brew "lld"    # fast host links (its own formula, no longer inside llvm)
+brew "python"
+brew "xz"
+brew "zip"
