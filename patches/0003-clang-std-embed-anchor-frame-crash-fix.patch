@@ -1,0 +1,68 @@
+From 23dd34f8f9245bab2a9653ef6bd1b37bce322c58 Mon Sep 17 00:00:00 2001
+From: Alex Angel <aangeletakis@gmail.com>
+Date: Sat, 18 Jul 2026 20:01:43 -0400
+Subject: [PATCH] [clang] std::embed: never crash resolving the quoted-search
+ anchor frame
+
+__builtin_std_embed's quoted-search anchor walks the constexpr call
+stack by index distance. Two crashes hid there:
+
+- a distance that reaches or passes the top of the evaluation stack
+  produced TargetFrameIndex 0; getCallFrameAndDepth's walk then runs
+  past BottomFrame (Index 1) into a null Caller. A constexpr-variable
+  initializer calling a single-frame embed wrapper hits this with the
+  conventional 0b101 lookup constant (which assumes two wrapper
+  frames). Clamp to index 1.
+
+- call indexes are not contiguous within a stack (sibling calls
+  consume indexes), so an exact-index lookup can miss and return a
+  null frame; it was dereferenced unchecked. Degrade to "no
+  quoted-search anchor" - embed-dirs are still searched - instead.
+
+Found by compile-time-browser's auto-embedded-assets path (a consteval
+wrapper invoked from constexpr variable initializers).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ clang/lib/AST/ExprConstant.cpp | 21 ++++++++++++++++-----
+ 1 file changed, 16 insertions(+), 5 deletions(-)
+
+diff --git a/clang/lib/AST/ExprConstant.cpp b/clang/lib/AST/ExprConstant.cpp
+index e403f70fa..39ee07362 100644
+--- a/clang/lib/AST/ExprConstant.cpp
++++ b/clang/lib/AST/ExprConstant.cpp
+@@ -11051,15 +11051,26 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
+         }
+       } else {
+         const unsigned int CallStackIndexDistance = CallStackDistance - 1;
++        // Clamp to the bottom frame: a distance that reaches (or passes)
++        // the top of the evaluation stack must not produce index 0 - the
++        // frame walk in getCallFrameAndDepth would run past BottomFrame
++        // into a null Caller. A constexpr-variable initializer calling a
++        // single-frame wrapper legitimately hits this.
+         const unsigned int TargetFrameIndex =
+-            CallStackIndexDistance > Info.CurrentCall->Index
++            CallStackIndexDistance >= Info.CurrentCall->Index
+                 ? 1
+                 : Info.CurrentCall->Index - CallStackIndexDistance;
+         auto TargetFrameAndDepth = Info.getCallFrameAndDepth(TargetFrameIndex);
+-        FileID ThisFileID =
+-            SM.getFileID(TargetFrameAndDepth.first->CallRange.getBegin());
+-        if (ThisFileID.isValid()) {
+-          ThisFile = SM.getFileEntryRefForID(ThisFileID);
++        // Call indexes need not be contiguous within this stack (sibling
++        // calls consumed indexes), so the lookup can miss: degrade to "no
++        // quoted-search anchor" (embed-dirs are still searched) - never
++        // dereference a null frame.
++        if (TargetFrameAndDepth.first != nullptr) {
++          FileID ThisFileID =
++              SM.getFileID(TargetFrameAndDepth.first->CallRange.getBegin());
++          if (ThisFileID.isValid()) {
++            ThisFile = SM.getFileEntryRefForID(ThisFileID);
++          }
+         }
+       }
+     }
+-- 
+2.43.0
+
