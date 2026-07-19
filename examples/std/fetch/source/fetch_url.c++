@@ -9,6 +9,8 @@
 #error "this compiler has no __builtin_std_fetch"
 #endif
 
+#include <phd/fetch.hpp>
+
 #include <cstddef>
 #include <cstdio>
 #include <span>
@@ -49,6 +51,10 @@ int main(int, char*[]) {
 	static constexpr fetch_result denied = fetch("https://not-allow-listed.invalid/");
 	static_assert(denied.status == fetch_not_authorized);
 	static_assert(denied.body.data() == nullptr);
+
+	// the public wrapper agrees with the raw builtin
+	static constexpr std::span<const char> via_header = phd::fetch<char>("https://example.com/");
+	static_assert(via_header.size() == page.body.size());
 
 	std::printf("FETCH-SMOKE-PASSED (%zu bytes fetched at compile time)\n",
 	     page.body.size());
