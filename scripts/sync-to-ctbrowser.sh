@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-repo_root=$(git -C .. rev-parse --show-toplevel)
+repo_root=$(git rev-parse --show-toplevel)
 ctb="${1:-$repo_root/../compile-time-browser}"
 [ -d "$ctb/include/ctbrowser" ] || { echo "compile-time-browser not found at $ctb (pass its path)" >&2; exit 1; }
 

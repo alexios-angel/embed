@@ -1,5 +1,7 @@
-# Build dependencies for the std::embed/std::fetch clang toolchain server.
-# Applied by remote-build-clang.sh on every run:
+# Build dependencies for the std::embed/std::fetch clang toolchain build on
+# the shared devbox (github.com/alexios-angel/infra — brew is bootstrapped
+# there but package-empty; THIS file owns the brew-only deps).
+# Applied by scripts/remote-build-clang.sh on every run:
 #   HOMEBREW_NO_AUTO_UPDATE=1 brew bundle install --file=<this file>
 brew "cmake"
 brew "ninja"

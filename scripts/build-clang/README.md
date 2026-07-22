@@ -16,6 +16,34 @@ All of the above are also built natively in CI by
 uploads a toolchain archive per platform. That is the easiest way to cover
 every platform at once — native builds avoid all cross-compilation caveats.
 
+## Remote build (shared devbox)
+
+The heavy native Linux build runs on the shared Azure devbox
+([github.com/alexios-angel/infra](https://github.com/alexios-angel/infra) —
+8 vCPU / 32 GiB; an LLVM build saturates every core, ~2 h full, minutes with
+a warm ccache). It builds the fork **github.com/alexios-angel/llvm-project**,
+branch **`std-embed`** (upstream base `ced9fa358` + the full std::embed /
+`#depend` commit) — the branch where further std::embed / compile-time-IO
+work lands.
+
+```sh
+../remote-build-clang.sh   # sync this repo to devbox:~/projects/embed,
+                           # clone/update the fork at ~/projects/llvm-project,
+                           # brew-bundle THIS dir's Brewfile, build clang+lld,
+                           # smoke-test std::embed + std::fetch, fetch
+                           # dist/clang-std-embed-*.tar.xz back
+../sync-to-ctbrowser.sh    # unpack the newest archive into
+                           # ../compile-time-browser/tools/clang-std-embed
+```
+
+Iteration loop: edit in the llvm fork (locally, or straight on the box in
+`~/projects/llvm-project`), push to `std-embed`, re-run
+`remote-build-clang.sh` — ccache turns the rebuild into minutes unless
+headers changed broadly. Regenerate the patch afterwards
+(`git format-patch -1 HEAD --stdout > patches/0002-...patch`) so the repo's
+patches stay the source of truth for CI. VM lifecycle (start/stop/ssh/IP
+rules) lives in the infra repo: `../infra/azure-build-server/server.sh`.
+
 ## Source layout
 
 The scripts build from an llvm-project checkout that already contains the

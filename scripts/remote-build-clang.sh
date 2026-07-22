@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Build the std::embed clang toolchain on the Azure build server, smoke-test
+# Build the std::embed clang toolchain on the shared devbox, smoke-test
 # std::embed with the fresh compiler, and fetch the dist archive into ./dist.
 #
 # Usage: ./remote-build-clang.sh [target]     (default: native = linux-x86_64)
+#
+# The box is github.com/alexios-angel/infra (sibling checkout ../infra),
+# reached via the `devbox` ssh alias that `../infra/azure-build-server/
+# server.sh ssh-config` writes; DEVBOX_HOST=ubuntu@<ip> overrides.
 #
 # Environment overrides:
 #   FORK_URL   llvm-project fork to build      (default: alexios-angel/llvm-project)
@@ -17,38 +21,45 @@ BRANCH="${BRANCH:-std-embed}"
 LINK_JOBS="${LINK_JOBS:-4}"
 TARGET="${1:-native}"
 
-ip=$(./server.sh ip)
-[ -n "$ip" ] || { echo "no public ip in terraform output — has this been applied?" >&2; exit 1; }
+host="${DEVBOX_HOST:-devbox}"
+if ! ssh -o ConnectTimeout=5 "$host" true 2>/dev/null; then
+  cat >&2 <<EOF
+cannot reach '$host' — likely one of:
+  alias missing:    ../infra/azure-build-server/server.sh ssh-config
+  box deallocated:  ../infra/azure-build-server/server.sh start
+  your IP changed:  ../infra/azure-build-server/server.sh allow-ip
+or set DEVBOX_HOST=ubuntu@<ip>.
+EOF
+  exit 1
+fi
 
-repo_root=$(git -C .. rev-parse --show-toplevel)
+repo_root=$(git rev-parse --show-toplevel)
 
-echo "== Syncing embed repo to $ip =="
+echo "== Syncing embed repo to $host =="
 rsync -az --delete \
   --exclude '.git/' \
   --exclude 'dist/' \
-  --exclude 'infra/azure-build-server/.terraform/' \
-  --exclude '*.tfstate*' --exclude 'tfplan' \
-  "$repo_root"/ "ubuntu@$ip:embed/"
+  "$repo_root"/ "$host:projects/embed/"
 
 echo "== Fetching $BRANCH from $FORK_URL and building ($TARGET) =="
-ssh "ubuntu@$ip" FORK_URL="$FORK_URL" BRANCH="$BRANCH" LINK_JOBS="$LINK_JOBS" TARGET="$TARGET" 'bash -s' <<'REMOTE'
+ssh "$host" FORK_URL="$FORK_URL" BRANCH="$BRANCH" LINK_JOBS="$LINK_JOBS" TARGET="$TARGET" 'bash -s' <<'REMOTE'
 set -euo pipefail
-if [ ! -d "$HOME/llvm-project/.git" ]; then
-  git clone --branch "$BRANCH" "$FORK_URL" "$HOME/llvm-project"
+if [ ! -d "$HOME/projects/llvm-project/.git" ]; then
+  git clone --branch "$BRANCH" "$FORK_URL" "$HOME/projects/llvm-project"
 else
-  git -C "$HOME/llvm-project" fetch origin "$BRANCH"
-  git -C "$HOME/llvm-project" checkout "$BRANCH"
-  git -C "$HOME/llvm-project" reset --hard "origin/$BRANCH"
+  git -C "$HOME/projects/llvm-project" fetch origin "$BRANCH"
+  git -C "$HOME/projects/llvm-project" checkout "$BRANCH"
+  git -C "$HOME/projects/llvm-project" reset --hard "origin/$BRANCH"
 fi
 
 # Converge build dependencies from the repo's Brewfile (single source of
-# truth; cloud-init only bootstraps brew itself).
+# truth; the devbox bootstraps brew but installs nothing — box-level ccache
+# sizing lives in its cloud-init).
 if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
   export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1
-  BUNDLE="$HOME/embed/infra/azure-build-server/Brewfile"
+  BUNDLE="$HOME/projects/embed/scripts/build-clang/Brewfile"
   /home/linuxbrew/.linuxbrew/bin/brew bundle check --file="$BUNDLE" >/dev/null 2>&1 \
     || /home/linuxbrew/.linuxbrew/bin/brew bundle install --file="$BUNDLE"
-  /home/linuxbrew/.linuxbrew/bin/ccache --set-config max_size=30G || true
 fi
 
 # Build with linuxbrew's latest clang when installed (brew install llvm):
@@ -70,20 +81,20 @@ if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
   fi
 fi
 
-LLVM_SRC="$HOME/llvm-project" \
+LLVM_SRC="$HOME/projects/llvm-project" \
 BUILD_ROOT="$HOME/llvm-build" \
 DIST_DIR="$HOME/dist" \
 JOBS="$(nproc)" \
 LINK_JOBS="$LINK_JOBS" \
-  bash "$HOME/embed/scripts/build-clang/build.sh" "$TARGET"
+  bash "$HOME/projects/embed/scripts/build-clang/build.sh" "$TARGET"
 REMOTE
 
 echo "== Smoke test: compile+run a std::embed example with the new clang++ =="
-ssh "ubuntu@$ip" 'bash -s' <<'REMOTE'
+ssh "$host" 'bash -s' <<'REMOTE'
 set -euo pipefail
 # trailing slash: match the install DIRECTORY, never the .tar.xz next to it
 tool=$(ls -dt "$HOME"/dist/clang-std-embed-*-linux-*/ | head -1); tool="${tool%/}"
-src="$HOME/embed/examples/std/basic/source"
+src="$HOME/projects/embed/examples/std/basic/source"
 "$tool/bin/clang++" -std=c++2d -Wno-c++2d-extensions \
   -I "$HOME/embed/include" \
   "--embed-dir=$src" \
@@ -93,10 +104,10 @@ echo "SMOKE-TEST-PASSED with $tool/bin/clang++"
 REMOTE
 
 echo "== Smoke test: compile-time std::fetch (needs network + --fetch-allow) =="
-ssh "ubuntu@$ip" 'bash -s' <<'REMOTE'
+ssh "$host" 'bash -s' <<'REMOTE'
 set -euo pipefail
 tool=$(ls -dt "$HOME"/dist/clang-std-embed-*-linux-*/ | head -1); tool="${tool%/}"
-src="$HOME/embed/examples/std/fetch/source"
+src="$HOME/projects/embed/examples/std/fetch/source"
 "$tool/bin/clang++" -std=c++2d \
   "--fetch-allow=https://example.com/" \
   "--fetch-allow=https://example.com/**" \
@@ -115,6 +126,6 @@ REMOTE
 echo "== Fetching dist archive =="
 mkdir -p "$repo_root/dist"
 rsync -a --include 'clang-std-embed-*.tar.xz' --include 'clang-std-embed-*.zip' --exclude '*' \
-  "ubuntu@$ip:dist/" "$repo_root/dist/"
+  "$host:dist/" "$repo_root/dist/"
 ls -lh "$repo_root"/dist/clang-std-embed-*
-echo "Done. Next: ./sync-to-ctbrowser.sh to install into compile-time-browser/tools."
+echo "Done. Next: ./scripts/sync-to-ctbrowser.sh to install into compile-time-browser/tools."
