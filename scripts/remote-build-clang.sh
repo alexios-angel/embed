@@ -108,14 +108,14 @@ ssh "$host" 'bash -s' <<'REMOTE'
 set -euo pipefail
 tool=$(ls -dt "$HOME"/dist/clang-std-embed-*-linux-*/ | head -1); tool="${tool%/}"
 src="$HOME/projects/embed/examples/std/fetch/source"
-"$tool/bin/clang++" -std=c++2d \
+"$tool/bin/clang++" -std=c++2d -I "$HOME/projects/embed/include" \
   "--fetch-allow=https://example.com/" \
   "--fetch-allow=https://example.com/**" \
   "$src/fetch_url.c++" -o /tmp/std-fetch-smoke
 /tmp/std-fetch-smoke
 # Negative: without --fetch-allow the fetch comes back NotAuthorized and
 # the example's static_assert must fail the compile.
-if "$tool/bin/clang++" -std=c++2d \
+if "$tool/bin/clang++" -std=c++2d -I "$HOME/projects/embed/include" \
   "$src/fetch_url.c++" -o /tmp/std-fetch-smoke-denied 2>/dev/null; then
   echo "FETCH-NEGATIVE-FAILED: compiled without --fetch-allow" >&2
   exit 1
