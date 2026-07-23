@@ -43,7 +43,8 @@ case "$cmd" in
       "$repo_root"/ "$host:projects/embed/"
 
     echo "== Preparing ~/projects/llvm-mingw and launching build-everything.sh =="
-    ssh "$host" FLAGS="$*" 'bash -s' <<'REMOTE'
+    # single remote token even with multiple flags (none ever contain quotes)
+    ssh "$host" "FLAGS='$*'" 'bash -s' <<'REMOTE'
 set -euo pipefail
 if [ ! -d "$HOME/projects/llvm-mingw/.git" ]; then
   git clone https://github.com/alexios-angel/llvm-mingw "$HOME/projects/llvm-mingw"
